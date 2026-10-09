@@ -843,6 +843,37 @@ function getIndustries(tabId) {
 }
 
 
+// 將各 API 的股票代號欄位統一化，並建立上市公司代號→產業別對照。
+function getStockCode(row) {
+  if (!row || typeof row !== "object") return "";
+  const keys = ["公司代號", "證券代號", "有價證券代號", "股票代號", "Code", "code"];
+  for (const key of keys) {
+    if (row[key] != null && String(row[key]).trim()) {
+      return String(row[key]).trim().replace(/\.0$/, "");
+    }
+  }
+  return "";
+}
+
+function getCompanyIndustryMap() {
+  const info = API_DATA.company;
+  const map = new Map();
+  if (!info || !Array.isArray(info.data)) return map;
+  info.data.forEach(row => {
+    const code = getStockCode(row);
+    if (code && row["產業別"]) map.set(code, row["產業別"]);
+  });
+  return map;
+}
+
+function getIndustryForRow(row, tabId) {
+  // 若資料本身已帶產業別，優先採用；否則依股票代號對照基本資料。
+  if (row && row["產業別"]) return row["產業別"];
+  const code = getStockCode(row);
+  return code ? getCompanyIndustryMap().get(code) || "" : "";
+}
+
+
 // ============================================================
 // 資料排序
 // ============================================================
@@ -901,13 +932,14 @@ function filterData(tabId) {
 
   let data = info.data;
 
-  if (
-    tabId === "company" &&
-    industryFilter !== "all"
-  ) {
-    data = data.filter(
-      row => row["產業別"] === industryFilter
-    );
+  // 產業別篩選：基本資料直接比對產業別；其他個股資料
+  // 透過上市公司基本資料中的公司代號對應產業別。
+  if (industryFilter !== "all") {
+    if (tabId === "company") {
+      data = data.filter(row => row["產業別"] === industryFilter);
+    } else if (["stock_day", "bwibbu", "revenue", "dividend"].includes(tabId)) {
+      data = data.filter(row => getIndustryForRow(row, tabId) === industryFilter);
+    }
   }
 
   if (searchText.trim()) {
@@ -1187,10 +1219,10 @@ function renderContentPanel(tabId) {
       'placeholder="搜尋關鍵字... (如 2330、台積電)" ' +
       'value="">';
 
-    // 產業篩選
+    // 產業篩選：公司基本資料及四種個股資訊共用同一份產業清單。
     if (
-      item.tab_id === "company" &&
-      industries.length > 0
+      ["company", "stock_day", "bwibbu", "revenue", "dividend"].includes(item.tab_id) &&
+      getIndustries("company").length > 0
     ) {
       html +=
         '<select class="industry-select" ' +
@@ -1198,7 +1230,7 @@ function renderContentPanel(tabId) {
 
         '<option value="all">全部產業別</option>';
 
-      industries.forEach(industry => {
+      getIndustries("company").forEach(industry => {
         html +=
           '<option value="' + escapeHtml(industry) + '">' +
           escapeHtml(industry) +
@@ -1235,7 +1267,7 @@ function renderContentPanel(tabId) {
   }
 
   // 綁定產業篩選事件
-  if (tabId === "company") {
+  if (["company", "stock_day", "bwibbu", "revenue", "dividend"].includes(tabId)) {
     const industrySelect = document.getElementById(
       "industry-" + tabId
     );
