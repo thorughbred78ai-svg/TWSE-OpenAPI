@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 """
-TWSE OpenAPI Dashboard Builder
-上市個股及大盤統計資訊儀表板
+TWSE 上市個股及大盤統計資訊儀表板 (圖示化版)
 """
 
 import json
 import urllib.request
 from pathlib import Path
 
-# ===== 保留的6個核心端點 =====
 ENDPOINTS = [
-    {"id": "exchangeReport/MI_INDEX", "tab_id": "mi_index", "title": "大盤統計資訊", "category": "大盤"},
-    {"id": "exchangeReport/STOCK_DAY_ALL", "tab_id": "stock_day", "title": "上市個股日成交資訊", "category": "個股成交"},
-    {"id": "exchangeReport/BWIBBU_ALL", "tab_id": "bwibbu", "title": "上市個股本益比殖利率", "category": "本益比"},
-    {"id": "opendata/t187ap05_L", "tab_id": "revenue", "title": "上市公司每月營業收入", "category": "營收"},
-    {"id": "opendata/t187ap45_L", "tab_id": "dividend", "title": "上市公司股利分派情形", "category": "股利"},
-    {"id": "opendata/t187ap03_L", "tab_id": "company", "title": "上市公司基本資料", "category": "公司資料"},
+    {"id": "exchangeReport/MI_INDEX", "tab_id": "mi_index", "title": "大盤統計資訊", "icon": "📊", "color": "#38bdf8", "desc": "每日大盤成交統計、漲跌家數"},
+    {"id": "exchangeReport/STOCK_DAY_ALL", "tab_id": "stock_day", "title": "上市個股日成交資訊", "icon": "📈", "color": "#34d399", "desc": "全部上市股票當日開高低收、成交量、成交金額"},
+    {"id": "exchangeReport/BWIBBU_ALL", "tab_id": "bwibbu", "title": "上市個股本益比殖利率", "icon": "💰", "color": "#fbbf24", "desc": "本益比、殖利率、股價淨值比"},
+    {"id": "opendata/t187ap05_L", "tab_id": "revenue", "title": "上市公司每月營業收入", "icon": "📋", "color": "#a78bfa", "desc": "當月營收、上月營收、去年同月、增減百分比"},
+    {"id": "opendata/t187ap45_L", "tab_id": "dividend", "title": "上市公司股利分派情形", "icon": "🎁", "color": "#f472b6", "desc": "現金股利、股票股利、除權息日期"},
+    {"id": "opendata/t187ap03_L", "tab_id": "company", "title": "上市公司基本資料", "icon": "🏢", "color": "#fb923c", "desc": "公司全名、產業別、資本額、成立日期"},
 ]
 
 BASE_URL = "https://openapi.twse.com.tw/v1"
@@ -63,19 +61,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0f172a;
-  --surface: #1e293b;
-  --surface-2: #334155;
-  --ink: #f8fafc;
+  --bg: #0b1121;
+  --surface: #151e32;
+  --surface-2: #1e293b;
+  --surface-3: #334155;
+  --ink: #f1f5f9;
   --muted: #94a3b8;
   --accent: #38bdf8;
   --accent-2: #818cf8;
   --success: #34d399;
+  --warning: #fbbf24;
   --danger: #f87171;
-  --line: rgba(148,163,184,0.15);
-  --radius: 10px;
-  --shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.4);
+  --line: rgba(148,163,184,0.12);
+  --radius: 14px;
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.4);
+  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.5);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -85,13 +85,12 @@ body {
   line-height: 1.6;
   min-height: 100vh;
 }
+
+/* ===== Header ===== */
 .header {
-  background: linear-gradient(135deg, var(--surface) 0%, #0f172a 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
   border-bottom: 1px solid var(--line);
-  padding: 1.2rem 1.5rem;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  padding: 1.5rem;
 }
 .header-inner {
   max-width: 1200px;
@@ -100,31 +99,47 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.5rem;
+}
+.header-left .badge {
+  display: inline-block;
+  background: rgba(56,189,248,0.15);
+  color: var(--accent);
+  font-size: 0.7rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
 }
 .header-left h1 {
-  font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+  font-size: clamp(1.3rem, 2.5vw, 1.8rem);
   font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  margin-bottom: 0.3rem;
 }
 .header-left p {
   color: var(--muted);
   font-size: 0.85rem;
-  margin-top: 0.2rem;
 }
 .header-right {
   display: flex;
-  gap: 1.2rem;
+  gap: 1.5rem;
   flex-wrap: wrap;
 }
 .stat-item {
   text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.8rem 1.2rem;
+  min-width: 90px;
 }
 .stat-value {
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--accent);
   font-family: "JetBrains Mono", monospace;
@@ -132,53 +147,158 @@ body {
   line-height: 1.2;
 }
 .stat-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
+  margin-top: 0.2rem;
 }
-.main-tabs {
+
+/* ===== Tab Cards ===== */
+.tab-section {
   max-width: 1200px;
-  margin: 1.5rem auto 0;
+  margin: 2rem auto 1.5rem;
   padding: 0 1.5rem;
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0.5rem;
 }
-.main-tab-btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
-  font-family: inherit;
+.tab-section-title {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tab-section-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border-radius: 2px;
+}
+.tab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 1rem;
+}
+.tab-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius) var(--radius) 0 0;
-  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 1.2rem 1rem;
+  text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  top: 1px;
+  overflow: hidden;
 }
-.main-tab-btn:hover { color: var(--ink); }
-.main-tab-btn.active {
+.tab-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--card-color);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.tab-card:hover::before,
+.tab-card.active::before { opacity: 1; }
+.tab-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--card-color);
+}
+.tab-card.active {
   background: var(--surface-2);
-  color: var(--accent);
-  border-bottom-color: var(--surface-2);
+  border-color: var(--card-color);
+  box-shadow: 0 0 20px rgba(0,0,0,0.3), 0 0 0 1px var(--card-color);
 }
-.main-tab-panel { display: none; }
-.main-tab-panel.active { display: block; }
+.tab-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.6rem;
+  display: block;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+.tab-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.3rem;
+}
+.tab-desc {
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.tab-count {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  font-size: 0.65rem;
+  font-family: "JetBrains Mono", monospace;
+  background: var(--surface-3);
+  color: var(--muted);
+  padding: 0.15rem 0.4rem;
+  border-radius: 8px;
+}
+.tab-card.active .tab-count {
+  background: var(--card-color);
+  color: var(--bg);
+}
+
+/* ===== Content Panel ===== */
+.content-panel {
+  display: none;
+}
+.content-panel.active {
+  display: block;
+}
 .main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem 1.5rem 3rem;
+  padding: 0 1.5rem 3rem;
 }
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--line);
+}
+.panel-icon {
+  font-size: 1.5rem;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.panel-subtitle {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ===== Toolbar ===== */
 .toolbar {
   display: flex;
   gap: 0.8rem;
   margin-bottom: 1rem;
   flex-wrap: wrap;
   align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
 }
 .search-box {
   flex: 1;
@@ -186,11 +306,12 @@ body {
   padding: 0.6rem 1rem;
   font-size: 0.9rem;
   font-family: inherit;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 10px;
   color: var(--ink);
   outline: none;
+  transition: border-color 0.2s;
 }
 .search-box:focus { border-color: var(--accent); }
 .search-box::placeholder { color: var(--muted); }
@@ -198,13 +319,13 @@ body {
   padding: 0.6rem 1rem;
   font-size: 0.9rem;
   font-family: inherit;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 10px;
   color: var(--ink);
   outline: none;
   cursor: pointer;
-  min-width: 140px;
+  min-width: 150px;
 }
 .industry-select:focus { border-color: var(--accent); }
 .result-count {
@@ -214,6 +335,8 @@ body {
   margin-bottom: 0.8rem;
   min-height: 1.2em;
 }
+
+/* ===== Table ===== */
 .data-table-wrap {
   overflow-x: auto;
   border-radius: var(--radius);
@@ -226,7 +349,7 @@ body {
 }
 .data-table th {
   background: var(--surface-2);
-  padding: 0.6rem 0.7rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
   font-weight: 500;
   color: var(--accent);
@@ -236,44 +359,47 @@ body {
   cursor: pointer;
   user-select: none;
   transition: background 0.2s;
+  border-bottom: 2px solid var(--line);
 }
-.data-table th:hover { background: #475569; }
+.data-table th:hover { background: var(--surface-3); }
 .data-table th .sort-indicator {
   display: inline-block;
   margin-left: 0.3rem;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   width: 1em;
 }
 .data-table th.sort-asc .sort-indicator::after { content: "▲"; color: var(--accent); }
 .data-table th.sort-desc .sort-indicator::after { content: "▼"; color: var(--accent); }
 .data-table td {
-  padding: 0.5rem 0.7rem;
+  padding: 0.55rem 0.75rem;
   border-bottom: 1px solid var(--line);
   color: var(--ink);
-  max-width: 280px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.data-table tr:hover td { background: rgba(56,189,248,0.05); }
-.data-table tr:last-child td { border-bottom: none; }
-.no-data { text-align: center; padding: 3rem; color: var(--muted); }
-.no-data-icon { font-size: 2.5rem; margin-bottom: 0.8rem; }
+.data-table tbody tr { transition: background 0.15s; }
+.data-table tbody tr:hover td { background: rgba(56,189,248,0.06); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.no-data { text-align: center; padding: 4rem 2rem; color: var(--muted); }
+.no-data-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.6; }
 mark {
-  background: rgba(56,189,248,0.3);
-  color: var(--accent);
+  background: rgba(56,189,248,0.25);
+  color: #7dd3fc;
   border-radius: 3px;
   padding: 1px 3px;
 }
 .error-box {
-  background: rgba(248,113,113,0.1);
-  border: 1px solid rgba(248,113,113,0.3);
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.25);
   border-radius: var(--radius);
-  padding: 1.5rem;
-  color: var(--danger);
+  padding: 2rem;
 }
 .error-url { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; word-break: break-all; }
+
+/* ===== Footer ===== */
 .footer {
   text-align: center;
   padding: 2rem;
@@ -283,96 +409,107 @@ mark {
   margin-top: 2rem;
 }
 .footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ===== Scrollbar ===== */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 4px; }
-@media (max-width: 640px) {
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
   .header-inner { flex-direction: column; align-items: flex-start; }
   .header-right { width: 100%; justify-content: space-between; }
-  .main-tabs { padding: 0 1rem; }
-  .main { padding: 1rem 1rem 3rem; }
+  .tab-grid { grid-template-columns: repeat(2, 1fr); }
+  .main { padding: 0 1rem 3rem; }
+  .tab-section { padding: 0 1rem; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .search-box, .industry-select { width: 100%; }
+  .panel-header { flex-wrap: wrap; }
+}
+@media (max-width: 400px) {
+  .tab-grid { grid-template-columns: 1fr; }
+  .stat-item { min-width: 70px; padding: 0.6rem 0.8rem; }
+  .stat-value { font-size: 1.2rem; }
 }
 </style>
 </head>
 <body>
+
+<!-- Header -->
 <header class="header">
   <div class="header-inner">
     <div class="header-left">
-      <h1>TWSE OpenAPI 資料儀表板</h1>
-      <p>TWSE 上市個股及大盤統計資訊 · 每日自動更新</p>
+      <div class="badge">TWSE OPENAPI</div>
+      <h1>上市個股及大盤統計資訊</h1>
+      <p>臺灣證券交易所免費開放資料 · 每日自動更新</p>
     </div>
     <div class="header-right">
-      <div class="stat-item"><span class="stat-value">{{TOTAL_ENDPOINTS}}</span><span class="stat-label">API 端點</span></div>
-      <div class="stat-item"><span class="stat-value">{{TOTAL_RECORDS}}</span><span class="stat-label">總記錄數</span></div>
-      <div class="stat-item"><span class="stat-value">{{CATEGORY_COUNT}}</span><span class="stat-label">資料類別</span></div>
-      <div class="stat-item"><span class="stat-value" style="color:{{ERROR_COLOR}};">{{ERROR_COUNT}}</span><span class="stat-label">異常端點</span></div>
+      <div class="stat-item">
+        <span class="stat-value">{{TOTAL_ENDPOINTS}}</span>
+        <div class="stat-label">API 端點</div>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">{{TOTAL_RECORDS}}</span>
+        <div class="stat-label">總記錄數</div>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">{{CATEGORY_COUNT}}</span>
+        <div class="stat-label">資料類別</div>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" style="color:{{ERROR_COLOR}};">{{ERROR_COUNT}}</span>
+        <div class="stat-label">異常端點</div>
+      </div>
     </div>
   </div>
 </header>
-<div class="main-tabs" id="mainTabs"></div>
+
+<!-- Tab Cards -->
+<div class="tab-section">
+  <div class="tab-section-title">資料類別</div>
+  <div class="tab-grid" id="tabGrid"></div>
+</div>
+
+<!-- Content Panels -->
 <main class="main" id="mainContent"></main>
+
+<!-- Footer -->
 <footer class="footer">
   <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> · 本頁面由 GitHub Actions 自動生成</p>
 </footer>
+
 <script>
 const API_DATA = {{DATA_JSON}};
-
-const TAB_CONFIG = [
-  { tab_id: "mi_index", title: "大盤統計資訊", hasIndustry: false },
-  { tab_id: "stock_day", title: "上市個股日成交資訊", hasIndustry: false },
-  { tab_id: "bwibbu", title: "上市個股本益比殖利率", hasIndustry: false },
-  { tab_id: "revenue", title: "上市公司每月營業收入", hasIndustry: false },
-  { tab_id: "dividend", title: "上市公司股利分派情形", hasIndustry: false },
-  { tab_id: "company", title: "上市公司基本資料", hasIndustry: true },
-];
+const TAB_META = {{TAB_META_JSON}};
 
 let currentTab = "mi_index";
 let searchText = "";
-let sortState = {}; // { tab_id: { column, direction } }
+let sortState = {};
 let industryFilter = "all";
 
-const mainTabs = document.getElementById("mainTabs");
+const tabGrid = document.getElementById("tabGrid");
 const mainContent = document.getElementById("mainContent");
 
-// ===== 初始化頁籤 =====
-function initTabs() {
-  TAB_CONFIG.forEach(cfg => {
-    const btn = document.createElement("button");
-    btn.className = "main-tab-btn";
-    btn.textContent = cfg.title;
-    btn.dataset.tab = cfg.tab_id;
-    btn.addEventListener("click", () => switchTab(cfg.tab_id));
-    mainTabs.appendChild(btn);
-  });
+// ===== Helpers =====
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }
 
-function switchTab(tabId) {
-  currentTab = tabId;
-  searchText = "";
-  industryFilter = "all";
-  document.querySelectorAll(".main-tab-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.tab === tabId);
-  });
-  renderTab(tabId);
-}
-
-// ===== 數值解析（用於排序） =====
 function parseNumeric(val) {
   if (val == null) return null;
   const s = String(val).replace(/,/g, "").trim();
-  // 處理百分比如 "1.23%"
   if (s.endsWith("%")) {
     const n = parseFloat(s.slice(0, -1));
     return isNaN(n) ? null : n;
   }
-  // 處理純數字
   const n = parseFloat(s);
   return isNaN(n) ? null : n;
 }
 
-// ===== 高亮文字 =====
 function highlightText(text, query) {
   if (!query) return escapeHtml(text);
   const str = String(text);
@@ -391,18 +528,45 @@ function highlightText(text, query) {
   return result;
 }
 
-// ===== 取得產業別列表 =====
+// ===== Render Tab Cards =====
+function renderTabCards() {
+  tabGrid.innerHTML = "";
+  TAB_META.forEach(meta => {
+    const info = API_DATA[meta.tab_id];
+    const count = info ? info.count : 0;
+    const isActive = meta.tab_id === currentTab;
+    const card = document.createElement("div");
+    card.className = "tab-card" + (isActive ? " active" : "");
+    card.style.setProperty("--card-color", meta.color);
+    card.innerHTML =
+      '<span class="tab-count">' + count.toLocaleString() + '</span>' +
+      '<span class="tab-icon">' + meta.icon + '</span>' +
+      '<div class="tab-title">' + escapeHtml(meta.title) + '</div>' +
+      '<div class="tab-desc">' + escapeHtml(meta.desc) + '</div>';
+    card.addEventListener("click", () => switchTab(meta.tab_id));
+    tabGrid.appendChild(card);
+  });
+}
+
+// ===== Switch Tab =====
+function switchTab(tabId) {
+  currentTab = tabId;
+  searchText = "";
+  industryFilter = "all";
+  renderTabCards();
+  renderContentPanel(tabId);
+}
+
+// ===== Get Industries =====
 function getIndustries(tabId) {
   const info = API_DATA[tabId];
   if (!info || !Array.isArray(info.data)) return [];
   const set = new Set();
-  info.data.forEach(row => {
-    if (row["產業別"]) set.add(row["產業別"]);
-  });
+  info.data.forEach(row => { if (row["產業別"]) set.add(row["產業別"]); });
   return Array.from(set).sort();
 }
 
-// ===== 排序資料 =====
+// ===== Sort Data =====
 function sortData(tabId, data) {
   const state = sortState[tabId];
   if (!state || !state.direction) return data;
@@ -422,18 +586,14 @@ function sortData(tabId, data) {
   });
 }
 
-// ===== 篩選資料 =====
+// ===== Filter Data =====
 function filterData(tabId) {
   const info = API_DATA[tabId];
   if (!info || !Array.isArray(info.data)) return [];
   let data = info.data;
-
-  // 產業別篩選（僅 company 頁籤）
   if (tabId === "company" && industryFilter !== "all") {
     data = data.filter(row => row["產業別"] === industryFilter);
   }
-
-  // 關鍵字搜尋
   if (searchText.trim()) {
     const q = searchText.toLowerCase().trim();
     data = data.filter(row => {
@@ -443,11 +603,10 @@ function filterData(tabId) {
       });
     });
   }
-
   return data;
 }
 
-// ===== 渲染表格 =====
+// ===== Render Table =====
 function renderTable(tabId, data) {
   const container = document.getElementById("table-" + tabId);
   const countEl = document.getElementById("count-" + tabId);
@@ -456,8 +615,9 @@ function renderTable(tabId, data) {
   if (!container) return;
 
   if (info && info.has_error) {
-    let html = '<div class="error-box"><div style="font-size:1.2rem;margin-bottom:0.5rem;">⚠️ 資料抓取失敗</div>';
-    html += '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;font-size:0.8rem;">' + escapeHtml(JSON.stringify(info.data, null, 2)) + '</pre>';
+    let html = '<div class="error-box">' +
+      '<div style="font-size:1.3rem;margin-bottom:0.5rem;">⚠️ 資料抓取失敗</div>' +
+      '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;font-size:0.8rem;color:var(--muted);">' + escapeHtml(JSON.stringify(info.data, null, 2)) + '</pre>';
     if (info.data && info.data.url) {
       html += '<div class="error-url">請求 URL: ' + escapeHtml(info.data.url) + '</div>';
     }
@@ -478,11 +638,12 @@ function renderTable(tabId, data) {
   let html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
   columns.forEach(col => {
     let sortClass = "";
-    let indicator = '<span class="sort-indicator"></span>';
     if (state && state.column === col) {
       sortClass = state.direction === "asc" ? "sort-asc" : "sort-desc";
     }
-    html += '<th class="' + sortClass + '" data-col="' + escapeHtml(col) + '" onclick="handleSort(\\'' + tabId + '\\', \\' + escapeHtml(col) + '\\')">' + escapeHtml(col) + indicator + '</th>';
+    html += '<th class="' + sortClass + '">' +
+      '<span onclick="handleSort(\\'' + tabId + '\\', \\' + escapeHtml(col) + '\\')" style="cursor:pointer;">' +
+      escapeHtml(col) + '<span class="sort-indicator"></span></span></th>';
   });
   html += '</tr></thead><tbody>';
 
@@ -498,18 +659,18 @@ function renderTable(tabId, data) {
   });
 
   if (data.length > 300) {
-    html += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);padding:1rem;">... 還有 ' + (data.length - 300) + ' 資料，請使用搜尋縮小範圍</td></tr>';
+    html += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);padding:1rem;">... 還有 ' + (data.length - 300).toLocaleString() + ' 筆資料，請使用搜尋縮小範圍</td></tr>';
   }
-
   html += '</tbody></table></div>';
   container.innerHTML = html;
+
   if (countEl) {
     const total = info && Array.isArray(info.data) ? info.data.length : 0;
     countEl.textContent = '顯示 ' + data.length.toLocaleString() + ' / ' + total.toLocaleString() + ' 筆資料';
   }
 }
 
-// 用於 onclick 的輔助函數需要掛在 window 上
+// ===== Sort Handler =====
 window.handleSort = function(tabId, column) {
   const state = sortState[tabId] || { column: null, direction: null };
   let direction = "asc";
@@ -532,44 +693,57 @@ function refreshCurrentTab() {
   renderTable(currentTab, data);
 }
 
-// ===== 渲染頁籤內容 =====
-function renderTab(tabId) {
-  const cfg = TAB_CONFIG.find(c => c.tab_id === tabId);
-  if (!cfg) return;
+// ===== Render Content Panel =====
+function renderContentPanel(tabId) {
+  const meta = TAB_META.find(c => c.tab_id === tabId);
+  if (!meta) return;
 
-  // 建立頁籤內容結構
-  let html = '<div class="main-tab-panel active" id="panel-' + tabId + '">';
-  html += '<div class="toolbar">';
-  html += '<input type="text" class="search-box" id="search-' + tabId + '" placeholder="搜尋關鍵字... (如 2330、台積電)" value="' + escapeHtml(searchText) + '">';
+  const industries = meta.tab_id === "company" ? getIndustries(tabId) : [];
 
-  // 產業別下拉選單（僅 company 頁籤）
-  if (cfg.hasIndustry) {
-    const industries = getIndustries(tabId);
-    html += '<select class="industry-select" id="industry-' + tabId + '">';
-    html += '<option value="all">全部產業別</option>';
-    industries.forEach(ind => {
-      html += '<option value="' + escapeHtml(ind) + '">' + escapeHtml(ind) + '</option>';
-    });
-    html += '</select>';
-  }
+  let html = '';
+  TAB_META.forEach(m => {
+    const isActive = m.tab_id === tabId;
+    const info = API_DATA[m.tab_id];
+    html += '<div class="content-panel' + (isActive ? ' active' : '') + '" id="panel-' + m.tab_id + '">';
 
-  html += '</div>';
-  html += '<div class="result-count" id="count-' + tabId + '"></div>';
-  html += '<div id="table-' + tabId + '"></div>';
-  html += '</div>';
+    // Panel header
+    html += '<div class="panel-header">' +
+      '<div class="panel-icon" style="border-color:' + m.color + '30;">' + m.icon + '</div>' +
+      '<div><div class="panel-title">' + escapeHtml(m.title) + '</div>' +
+      '<div class="panel-subtitle">' + escapeHtml(m.desc) + '</div></div>' +
+      '</div>';
+
+    // Toolbar
+    html += '<div class="toolbar">' +
+      '<input type="text" class="search-box" id="search-' + m.tab_id + '" placeholder="搜尋關鍵字... (如 2330、台積電)" value="">';
+
+    if (m.tab_id === "company" && industries.length > 0) {
+      html += '<select class="industry-select" id="industry-' + m.tab_id + '">' +
+        '<option value="all">全部產業別</option>';
+      industries.forEach(ind => {
+        html += '<option value="' + escapeHtml(ind) + '">' + escapeHtml(ind) + '</option>';
+      });
+      html += '</select>';
+    }
+
+    html += '</div>';
+    html += '<div class="result-count" id="count-' + m.tab_id + '"></div>';
+    html += '<div id="table-' + m.tab_id + '"></div>';
+    html += '</div>';
+  });
+
   mainContent.innerHTML = html;
 
-  // 綁定搜尋事件
-  const searchBox = document.getElementById("search-" + tabId);
-  if (searchBox) {
-    searchBox.addEventListener("input", (e) => {
+  // Bind events for active tab only (others are hidden)
+  const activeSearch = document.getElementById("search-" + tabId);
+  if (activeSearch) {
+    activeSearch.addEventListener("input", (e) => {
       searchText = e.target.value;
       refreshCurrentTab();
     });
   }
 
-  // 綁定產業別事件
-  if (cfg.hasIndustry) {
+  if (tabId === "company") {
     const industrySelect = document.getElementById("industry-" + tabId);
     if (industrySelect) {
       industrySelect.addEventListener("change", (e) => {
@@ -579,19 +753,12 @@ function renderTab(tabId) {
     }
   }
 
-  // 初始渲染
   refreshCurrentTab();
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// ===== 啟動 =====
-initTabs();
-switchTab("mi_index");
+// ===== Init =====
+renderTabCards();
+renderContentPanel("mi_index");
 </script>
 </body>
 </html>"""
@@ -603,6 +770,7 @@ def generate_html(all_data):
     error_count = sum(1 for v in all_data.values() if v["has_error"])
 
     data_json = json.dumps(all_data, ensure_ascii=False, default=str)
+    tab_meta_json = json.dumps([{k: v for k, v in ep.items() if k in ("tab_id", "title", "icon", "color", "desc")} for ep in ENDPOINTS], ensure_ascii=False)
 
     html = HTML_TEMPLATE
     html = html.replace("{{TOTAL_ENDPOINTS}}", str(total_endpoints))
@@ -611,6 +779,7 @@ def generate_html(all_data):
     html = html.replace("{{ERROR_COUNT}}", str(error_count))
     html = html.replace("{{ERROR_COLOR}}", 'var(--danger)' if error_count > 0 else 'var(--success)')
     html = html.replace("{{DATA_JSON}}", data_json)
+    html = html.replace("{{TAB_META_JSON}}", tab_meta_json)
     return html
 
 
