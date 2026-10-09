@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 TWSE OpenAPI Dashboard Builder
@@ -7,6 +8,7 @@ TWSE OpenAPI Dashboard Builder
 import json
 import urllib.request
 from pathlib import Path
+from string import Template
 
 # TWSE OpenAPI 端點列表
 ENDPOINTS = {
@@ -19,7 +21,7 @@ ENDPOINTS = {
     "股利與除權息": [
         {"id": "t187ap05_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期"},
         {"id": "t187ap05_O", "name": "上櫃公司股利分派情形", "desc": "上櫃公司股利資料"},
-        {"id": "t187ap06_L", "name": "上市公司除權息資料", "desc": "除權息參考價、權值、息值"},
+        {"id": "t187ap06_L", "name": "上市司除權息資料", "desc": "除權息參考價、權值、息值"},
         {"id": "t187ap06_O", "name": "上櫃公司除權息資料", "desc": "上櫃公司除權息資料"},
     ],
     "每日交易": [
@@ -59,7 +61,7 @@ ENDPOINTS = {
         {"id": "t187ap12_O", "name": "上櫃權證交易資料", "desc": "上櫃權證交易資料"},
     ],
     "公司治理ESG": [
-        {"id": "t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點等"},
+        {"id": "t187ap46_L_1", "name": "ESG資揭露-公概況", "desc": "員工人數、營運據點等"},
         {"id": "t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用等"},
         {"id": "t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數等"},
         {"id": "t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "董事會運作、內控機制等"},
@@ -100,16 +102,7 @@ def fetch_all_data():
     return all_data
 
 
-def generate_html(all_data):
-    """生成靜態 HTML 網站"""
-    total_endpoints = sum(len(eps) for eps in ENDPOINTS.values())
-    total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
-    error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
-
-    data_json = json.dumps(all_data, ensure_ascii=False, default=str)
-    endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in ENDPOINTS.items()}, ensure_ascii=False)
-
-    html = f"""<!DOCTYPE html>
+HTML_TEMPLATE = Template("""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -118,7 +111,7 @@ def generate_html(all_data):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root {{
+:root {
   --bg: #0f172a;
   --surface: #1e293b;
   --surface-2: #334155;
@@ -133,16 +126,16 @@ def generate_html(all_data):
   --radius: 12px;
   --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
   --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.4), 0 8px 10px -6px rgba(0,0,0,0.4);
-}}
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.6;
   min-height: 100vh;
-}}
-.header {{
+}
+.header {
   background: linear-gradient(135deg, var(--surface) 0%, #0f172a 100%);
   border-bottom: 1px solid var(--line);
   padding: 2rem 1.5rem;
@@ -150,9 +143,9 @@ body {{
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-}}
-.header-inner {{ max-width: 1200px; margin: 0 auto; }}
-.header h1 {{
+}
+.header-inner { max-width: 1200px; margin: 0 auto; }
+.header h1 {
   font-size: clamp(1.5rem, 3vw, 2.2rem);
   font-weight: 700;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -160,40 +153,40 @@ body {{
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 0.5rem;
-}}
-.header p {{ color: var(--muted); font-size: 0.95rem; }}
-.stats-bar {{
+}
+.header p { color: var(--muted); font-size: 0.95rem; }
+.stats-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1rem;
   max-width: 1200px;
   margin: 1.5rem auto;
   padding: 0 1.5rem;
-}}
-.stat-card {{
+}
+.stat-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1.2rem;
   text-align: center;
   transition: transform 0.2s, box-shadow 0.2s;
-}}
-.stat-card:hover {{ transform: translateY(-2px); box-shadow: var(--shadow-lg); }}
-.stat-value {{
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.stat-value {
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--accent);
   font-family: "JetBrains Mono", monospace;
-}}
-.stat-label {{
+}
+.stat-label {
   font-size: 0.8rem;
   color: var(--muted);
   margin-top: 0.3rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}}
-.search-section {{ max-width: 1200px; margin: 0 auto 1.5rem; padding: 0 1.5rem; }}
-.search-box {{
+}
+.search-section { max-width: 1200px; margin: 0 auto 1.5rem; padding: 0 1.5rem; }
+.search-box {
   width: 100%;
   padding: 1rem 1.2rem;
   font-size: 1rem;
@@ -204,18 +197,18 @@ body {{
   color: var(--ink);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-}}
-.search-box:focus {{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.15); }}
-.search-box::placeholder {{ color: var(--muted); }}
-.filter-bar {{
+}
+.search-box:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.15); }
+.search-box::placeholder { color: var(--muted); }
+.filter-bar {
   max-width: 1200px;
   margin: 0 auto 1rem;
   padding: 0 1.5rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}}
-.filter-btn {{
+}
+.filter-btn {
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
   font-family: inherit;
@@ -225,15 +218,15 @@ body {{
   color: var(--muted);
   cursor: pointer;
   transition: all 0.2s;
-}}
-.filter-btn:hover, .filter-btn.active {{
+}
+.filter-btn:hover, .filter-btn.active {
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);
-}}
-.main {{ max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 3rem; }}
-.category-section {{ margin-bottom: 2rem; }}
-.category-title {{
+}
+.main { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+.category-section { margin-bottom: 2rem; }
+.category-title {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--accent-2);
@@ -243,21 +236,21 @@ body {{
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}}
-.category-title .count {{
+}
+.category-title .count {
   font-size: 0.75rem;
   background: var(--surface-2);
   padding: 0.15rem 0.5rem;
   border-radius: 10px;
   color: var(--muted);
   font-weight: 400;
-}}
-.endpoint-grid {{
+}
+.endpoint-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1rem;
-}}
-.endpoint-card {{
+}
+.endpoint-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -266,8 +259,8 @@ body {{
   transition: all 0.2s;
   position: relative;
   overflow: hidden;
-}}
-.endpoint-card::before {{
+}
+.endpoint-card::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -275,47 +268,47 @@ body {{
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   opacity: 0;
   transition: opacity 0.2s;
-}}
-.endpoint-card:hover::before {{ opacity: 1; }}
-.endpoint-card:hover {{
+}
+.endpoint-card:hover::before { opacity: 1; }
+.endpoint-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--surface-2);
-}}
-.endpoint-card.hidden {{ display: none; }}
-.endpoint-header {{
+}
+.endpoint-card.hidden { display: none; }
+.endpoint-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 0.5rem;
-}}
-.endpoint-name {{ font-weight: 600; font-size: 1rem; color: var(--ink); }}
-.endpoint-badge {{
+}
+.endpoint-name { font-weight: 600; font-size: 1rem; color: var(--ink); }
+.endpoint-badge {
   font-size: 0.7rem;
   padding: 0.15rem 0.5rem;
   border-radius: 10px;
   font-weight: 500;
   font-family: "JetBrains Mono", monospace;
-}}
-.badge-success {{ background: rgba(52,211,153,0.15); color: var(--success); }}
-.badge-error {{ background: rgba(248,113,113,0.15); color: var(--danger); }}
-.endpoint-desc {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 0.8rem; }}
-.endpoint-meta {{
+}
+.badge-success { background: rgba(52,211,153,0.15); color: var(--success); }
+.badge-error { background: rgba(248,113,113,0.15); color: var(--danger); }
+.endpoint-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.8rem; }
+.endpoint-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 0.8rem;
   color: var(--muted);
-}}
-.endpoint-id {{
+}
+.endpoint-id {
   font-family: "JetBrains Mono", monospace;
   background: var(--surface-2);
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
   font-size: 0.75rem;
-}}
-.record-count {{ font-family: "JetBrains Mono", monospace; }}
-.modal-overlay {{
+}
+.record-count { font-family: "JetBrains Mono", monospace; }
+.modal-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -324,9 +317,9 @@ body {{
   align-items: center;
   justify-content: center;
   padding: 1rem;
-}}
-.modal-overlay.active {{ display: flex; }}
-.modal {{
+}
+.modal-overlay.active { display: flex; }
+.modal {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -336,16 +329,16 @@ body {{
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-lg);
-}}
-.modal-header {{
+}
+.modal-header {
   padding: 1.2rem;
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: center;
-}}
-.modal-title {{ font-size: 1.1rem; font-weight: 600; }}
-.modal-close {{
+}
+.modal-title { font-size: 1.1rem; font-weight: 600; }
+.modal-close {
   background: none;
   border: none;
   color: var(--muted);
@@ -355,20 +348,20 @@ body {{
   line-height: 1;
   border-radius: 6px;
   transition: all 0.2s;
-}}
-.modal-close:hover {{ background: var(--surface-2); color: var(--ink); }}
-.modal-body {{ padding: 1.2rem; overflow-y: auto; flex: 1; }}
-.data-table-wrap {{
+}
+.modal-close:hover { background: var(--surface-2); color: var(--ink); }
+.modal-body { padding: 1.2rem; overflow-y: auto; flex: 1; }
+.data-table-wrap {
   overflow-x: auto;
   border-radius: 8px;
   border: 1px solid var(--line);
-}}
-.data-table {{
+}
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-}}
-.data-table th {{
+}
+.data-table th {
   background: var(--surface-2);
   padding: 0.7rem 0.8rem;
   text-align: left;
@@ -377,8 +370,8 @@ body {{
   white-space: nowrap;
   position: sticky;
   top: 0;
-}}
-.data-table td {{
+}
+.data-table td {
   padding: 0.6rem 0.8rem;
   border-bottom: 1px solid var(--line);
   color: var(--ink);
@@ -386,12 +379,12 @@ body {{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}}
-.data-table tr:hover td {{ background: rgba(56,189,248,0.05); }}
-.data-table tr:last-child td {{ border-bottom: none; }}
-.no-data {{ text-align: center; padding: 3rem; color: var(--muted); }}
-.no-data-icon {{ font-size: 3rem; margin-bottom: 1rem; }}
-.json-preview {{
+}
+.data-table tr:hover td { background: rgba(56,189,248,0.05); }
+.data-table tr:last-child td { border-bottom: none; }
+.no-data { text-align: center; padding: 3rem; color: var(--muted); }
+.no-data-icon { font-size: 3rem; margin-bottom: 1rem; }
+.json-preview {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -404,15 +397,15 @@ body {{
   color: var(--muted);
   max-height: 400px;
   overflow-y: auto;
-}}
-.tabs {{
+}
+.tabs {
   display: flex;
   gap: 0.3rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--line);
   padding-bottom: 0.5rem;
-}}
-.tab-btn {{
+}
+.tab-btn {
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
   font-family: inherit;
@@ -422,37 +415,37 @@ body {{
   color: var(--muted);
   cursor: pointer;
   transition: all 0.2s;
-}}
-.tab-btn:hover {{ color: var(--ink); }}
-.tab-btn.active {{ background: var(--surface-2); color: var(--accent); }}
-.tab-panel {{ display: none; }}
-.tab-panel.active {{ display: block; }}
-.footer {{
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { background: var(--surface-2); color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.footer {
   text-align: center;
   padding: 2rem;
   color: var(--muted);
   font-size: 0.85rem;
   border-top: 1px solid var(--line);
   margin-top: 2rem;
-}}
-.footer a {{ color: var(--accent); text-decoration: none; }}
-.footer a:hover {{ text-decoration: underline; }}
-::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-::-webkit-scrollbar-track {{ background: var(--bg); }}
-::-webkit-scrollbar-thumb {{ background: var(--surface-2); border-radius: 4px; }}
-::-webkit-scrollbar-thumb:hover {{ background: var(--muted); }}
-@media (max-width: 640px) {{
-  .endpoint-grid {{ grid-template-columns: 1fr; }}
-  .stats-bar {{ grid-template-columns: repeat(2, 1fr); }}
-  .header {{ padding: 1.2rem 1rem; }}
-  .main, .search-section, .filter-bar {{ padding-left: 1rem; padding-right: 1rem; }}
-}}
-@media (prefers-reduced-motion: reduce) {{
-  *, *::before, *::after {{
+}
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+@media (max-width: 640px) {
+  .endpoint-grid { grid-template-columns: 1fr; }
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .header { padding: 1.2rem 1rem; }
+  .main, .search-section, .filter-bar { padding-left: 1rem; padding-right: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
-  }}
-}}
+  }
+}
 </style>
 </head>
 <body>
@@ -464,19 +457,19 @@ body {{
 </header>
 <div class="stats-bar">
   <div class="stat-card">
-    <div class="stat-value">{total_endpoints}</div>
+    <div class="stat-value">$total_endpoints</div>
     <div class="stat-label">API 端點</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">{total_records:,}</div>
+    <div class="stat-value">$total_records</div>
     <div class="stat-label">總記錄數</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">{len(ENDPOINTS)}</div>
+    <div class="stat-value">$category_count</div>
     <div class="stat-label">資料類別</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value" style="color: {'var(--danger)' if error_count > 0 else 'var(--success)'};">{error_count}</div>
+    <div class="stat-value" style="color: $error_color;">$error_count</div>
     <div class="stat-label">異常端點</div>
   </div>
 </div>
@@ -508,8 +501,8 @@ body {{
      本頁面由 GitHub Actions 自動生成</p>
 </footer>
 <script>
-const API_DATA = {data_json};
-const ENDPOINTS_META = {endpoints_json};
+const API_DATA = $data_json;
+const ENDPOINTS_META = $endpoints_json;
 const searchBox = document.getElementById('searchBox');
 const filterBar = document.getElementById('filterBar');
 const mainContent = document.getElementById('mainContent');
@@ -520,114 +513,133 @@ const tabTable = document.getElementById('tab-table');
 const tabJson = document.getElementById('tab-json');
 let currentCategory = 'all';
 let currentSearch = '';
-function initFilters() {{
-  Object.keys(ENDPOINTS_META).forEach(cat => {{
+function initFilters() {
+  Object.keys(ENDPOINTS_META).forEach(cat => {
     const btn = document.createElement('button');
     btn.className = 'filter-btn';
     btn.textContent = cat;
     btn.dataset.category = cat;
     btn.addEventListener('click', () => setCategory(cat));
     filterBar.appendChild(btn);
-  }});
-}}
-function setCategory(cat) {{
+  });
+}
+function setCategory(cat) {
   currentCategory = cat;
-  document.querySelectorAll('.filter-btn').forEach(b => {{
+  document.querySelectorAll('.filter-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.category === cat);
-  }});
+  });
   render();
-}}
-function render() {{
+}
+function render() {
   mainContent.innerHTML = '';
   const categories = currentCategory === 'all' ? Object.keys(API_DATA) : [currentCategory];
   let hasResults = false;
-  categories.forEach(category => {{
-    const endpoints = API_DATA[category].filter(ep => {{
+  categories.forEach(category => {
+    const endpoints = API_DATA[category].filter(ep => {
       const q = currentSearch.toLowerCase();
       return !q || ep.name.toLowerCase().includes(q) || ep.id.toLowerCase().includes(q) || ep.desc.toLowerCase().includes(q);
-    }});
+    });
     if (endpoints.length === 0) return;
     hasResults = true;
     const section = document.createElement('div');
     section.className = 'category-section';
-    section.innerHTML = `<h2 class="category-title">${{category}<span class="count">${{endpoints.length}} 個端點</span></h2><div class="endpoint-grid"></div>`;
+    section.innerHTML = '<h2 class="category-title">' + category + '<span class="count">' + endpoints.length + ' 個端點</span></h2><div class="endpoint-grid"></div>';
     const grid = section.querySelector('.endpoint-grid');
-    endpoints.forEach(ep => {{
+    endpoints.forEach(ep => {
       const card = document.createElement('div');
       card.className = 'endpoint-card';
       const badgeClass = ep.has_error ? 'badge-error' : 'badge-success';
       const badgeText = ep.has_error ? '異常' : '正常';
-      card.innerHTML = `<div class="endpoint-header"><div class="endpoint-name">${{ep.name}}</div><span class="endpoint-badge ${{badgeClass}}">${{badgeText}}</span></div><div class="endpoint-desc">${{ep.desc}}</div><div class="endpoint-meta"><span class="endpoint-id">${{ep.id}}</span><span class="record-count">${{ep.count.toLocaleString()}} 筆</span></div>`;
+      card.innerHTML = '<div class="endpoint-header"><div class="endpoint-name">' + ep.name + '</div><span class="endpoint-badge ' + badgeClass + '">' + badgeText + '</span></div><div class="endpoint-desc">' + ep.desc + '</div><div class="endpoint-meta"><span class="endpoint-id">' + ep.id + '</span><span class="record-count">' + ep.count.toLocaleString() + ' 筆</span></div>';
       card.addEventListener('click', () => openModal(ep, category));
       grid.appendChild(card);
-    }});
+    });
     mainContent.appendChild(section);
-  }});
-  if (!hasResults) {{
-    mainContent.innerHTML = `<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合「<strong>${{currentSearch}}</strong>」的結果</p></div>`;
-  }}
-}}
-function openModal(ep, category) {{
-  modalTitle.textContent = `${{ep.name}} (${{ep.id}})`;
+  });
+  if (!hasResults) {
+    mainContent.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合「<strong>' + escapeHtml(currentSearch) + '</strong>」的結果</p></div>';
+  }
+}
+function openModal(ep, category) {
+  modalTitle.textContent = ep.name + ' (' + ep.id + ')';
   const jsonStr = JSON.stringify(ep.data, null, 2);
-  tabJson.innerHTML = `<pre class="json-preview">${{escapeHtml(jsonStr)}}</pre>`;
-  if (Array.isArray(ep.data) && ep.data.length > 0) {{
+  tabJson.innerHTML = '<pre class="json-preview">' + escapeHtml(jsonStr) + '</pre>';
+  if (Array.isArray(ep.data) && ep.data.length > 0) {
     const columns = Object.keys(ep.data[0]);
     let tableHtml = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
-    columns.forEach(col => {{ tableHtml += `<th>${{escapeHtml(col)}}</th>`; }});
+    columns.forEach(col => { tableHtml += '<th>' + escapeHtml(col) + '</th>'; });
     tableHtml += '</tr></thead><tbody>';
-    ep.data.slice(0, 200).forEach(row => {{
+    ep.data.slice(0, 200).forEach(row => {
       tableHtml += '<tr>';
-      columns.forEach(col => {{
+      columns.forEach(col => {
         const val = row[col];
         const display = val === null || val === undefined ? '' : String(val);
-        tableHtml += `<td title="${{escapeHtml(display)}}">${{escapeHtml(display)}}</td>`;
-      }});
+        tableHtml += '<td title="' + escapeHtml(display) + '">' + escapeHtml(display) + '</td>';
+      });
       tableHtml += '</tr>';
-    }});
-    if (ep.data.length > 200) {{
-      tableHtml += `<tr><td colspan="${{columns.length}}" style="text-align:center;color:var(--muted);">... 還有 ${{ep.data.length - 200}} 筆資料，請切換 JSON 分頁查看完整內容</td></tr>`;
-    }}
+    });
+    if (ep.data.length > 200) {
+      tableHtml += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (ep.data.length - 200) + ' 筆資料，請切換 JSON 分頁查看完整內容</td></tr>';
+    }
     tableHtml += '</tbody></table></div>';
     tabTable.innerHTML = tableHtml;
-  }} else if (ep.has_error) {{
-    tabTable.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓失敗</p><pre class="json-preview">${{escapeHtml(JSON.stringify(ep.data, null, 2))}}</pre></div>`;
-  }} else {{
-    tabTable.innerHTML = `<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>`;
-  }}
+  } else if (ep.has_error) {
+    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓取失敗</p><pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre></div>';
+  } else {
+    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>';
+  }
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
   document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === 0));
   modalOverlay.classList.add('active');
   document.body.style.overflow = 'hidden';
-}}
-function closeModal() {{
+}
+function closeModal() {
   modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
-}}
-function escapeHtml(text) {{
+}
+function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
-}}
-searchBox.addEventListener('input', (e) => {{ currentSearch = e.target.value; render(); }});
+}
+searchBox.addEventListener('input', (e) => { currentSearch = e.target.value; render(); });
 modalClose.addEventListener('click', closeModal);
-modalOverlay.addEventListener('click', (e) => {{ if (e.target === modalOverlay) closeModal(); }});
-document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape') closeModal(); }});
-document.querySelectorAll('.tab-btn').forEach(btn => {{
-  btn.addEventListener('click', () => {{
+modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById(`tab-${{tab}}`).classList.add('active');
-  }});
-}});
+    document.getElementById('tab-' + tab).classList.add('active');
+  });
+});
 initFilters();
 render();
 </script>
 </body>
-</html>"""
-    return html
+</html>""")
+
+
+def generate_html(all_data):
+    """生成靜態 HTML 網站"""
+    total_endpoints = sum(len(eps) for eps in ENDPOINTS.values())
+    total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
+    error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
+
+    data_json = json.dumps(all_data, ensure_ascii=False, default=str)
+    endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in ENDPOINTS.items()}, ensure_ascii=False)
+
+    return HTML_TEMPLATE.substitute(
+        total_endpoints=total_endpoints,
+        total_records=f"{total_records:,}",
+        category_count=len(ENDPOINTS),
+        error_count=error_count,
+        error_color='var(--danger)' if error_count > 0 else 'var(--success)',
+        data_json=data_json,
+        endpoints_json=endpoints_json,
+    )
 
 
 def main():
