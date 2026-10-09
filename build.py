@@ -1,8 +1,7 @@
-
 #!/usr/bin/env python3
 """
 TWSE OpenAPI Dashboard Builder
-抓取台灣證券交易所 OpenAPI 資料並生成靜態搜尋網站
+抓取台灣證券交易所與櫃買中心 OpenAPI 資料並生成靜態搜尋網站
 """
 
 import json
@@ -10,95 +9,108 @@ import urllib.request
 from pathlib import Path
 from string import Template
 
-# TWSE OpenAPI 端點列表
-ENDPOINTS = {
-    "公司基本資料": [
-        {"id": "t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、董監事"},
-        {"id": "t187ap03_O", "name": "上櫃公司基本資料", "desc": "上櫃公司基本資料（欄位英文命名）"},
-        {"id": "t187ap04_L", "name": "上市公司董事監察人資料", "desc": "董監事姓名、職稱、選任時持股"},
-        {"id": "t187ap04_O", "name": "上櫃公司董事監察人資料", "desc": "上櫃公司董監事資料"},
+# ===== TWSE 上市資料端點（openapi.twse.com.tw）=====
+# 這些端點經過驗證，確實存在於 TWSE OpenAPI
+TWSE_ENDPOINTS = {
+    "公司治理": [
+        {"id": "opendata/t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、資本額、成立日期、董監事"},
+        {"id": "opendata/t187ap04_L", "name": "上市公司董事監察人資料", "desc": "董監事姓名、職稱、選任時持股、持有股份"},
+        {"id": "opendata/t187ap05_L", "name": "上市公司每月營業收入", "desc": "當月營收、上月營收、去年同月、增減百分比"},
+        {"id": "opendata/t187ap45_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期、股東會日期"},
+        {"id": "opendata/t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點、產品與服務等"},
+        {"id": "opendata/t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用、水資源管理等"},
+        {"id": "opendata/t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數、職業安全衛生等"},
+        {"id": "opendata/t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "董事會運作、內控機制、資訊透明等"},
+        {"id": "opendata/t187ap46_L_18", "name": "ESG資訊揭露-持股及控制力", "desc": "持股結構、控制力相關資訊"},
+        {"id": "opendata/t187ap46_L_19", "name": "ESG資訊揭露-風險管理政策", "desc": "風險管理政策與關鍵材料風險"},
+        {"id": "opendata/t187ap46_L_20", "name": "ESG資訊揭露-反競爭行為法律訴訟", "desc": "反競爭行為相關法律訴訟金額"},
+        {"id": "opendata/t187ap46_L_21", "name": "ESG資訊揭露-職業安全衛生", "desc": "職業災害、火災件數與死傷人數"},
     ],
-    "股利與除權息": [
-        {"id": "t187ap05_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期"},
-        {"id": "t187ap05_O", "name": "上櫃公司股利分派情形", "desc": "上櫃公司股利資料"},
-        {"id": "t187ap06_L", "name": "上市司除權息資料", "desc": "除權息參考價、權值、息值"},
-        {"id": "t187ap06_O", "name": "上櫃公司除權息資料", "desc": "上櫃公司除權息資料"},
-    ],
-    "每日交易": [
-        {"id": "t187ap01_L", "name": "上市個股日成交資訊", "desc": "上市個股每日開高低收、成交量、成交金額"},
-        {"id": "t187ap01_O", "name": "上櫃個股日成交資訊", "desc": "上櫃個股每日成交資訊"},
-        {"id": "t187ap02_L", "name": "上市個股日本益比、殖利率、股價淨值比", "desc": "本益比、殖利率、股價淨值比"},
-        {"id": "t187ap02_O", "name": "上櫃個股日本益比、殖利率、股價淨值比", "desc": "上櫃個股本益比等資料"},
-        {"id": "t187ap14_L", "name": "上市個股盤後定價交易", "desc": "盤後定價交易資訊"},
-        {"id": "t187ap14_O", "name": "上櫃個股盤後定價交易", "desc": "上櫃盤後定價交易資訊"},
-        {"id": "t187ap15_L", "name": "上市鉅額交易日成交資訊", "desc": "鉅額交易成交價、成交量"},
-        {"id": "t187ap15_O", "name": "上櫃鉅額交易日成交資訊", "desc": "上櫃鉅額交易資訊"},
-        {"id": "t187ap16_L", "name": "上市零股交易行情", "desc": "零股成交價、成交量"},
-        {"id": "t187ap16_O", "name": "上櫃零股交易行情", "desc": "上櫃零股交易資訊"},
-    ],
-    "指數": [
-        {"id": "t47csc", "name": "大盤統計資訊", "desc": "每日大盤成交統計"},
-        {"id": "t44sc", "name": "大盤指數收盤行情", "desc": "各類指數收盤資訊"},
-    ],
-    "融資融券": [
-        {"id": "t93sc", "name": "上市融資融券彙總", "desc": "每日融資餘額、融券餘額"},
-        {"id": "t94sc", "name": "上櫃融資融券彙總", "desc": "上櫃融資融券資料"},
-    ],
-    "借券": [
-        {"id": "t38sc", "name": "上市借券成交明細", "desc": "借券成交資訊"},
-        {"id": "t38asc", "name": "上櫃借券成交明細", "desc": "上櫃借券成交資訊"},
-        {"id": "t93asc", "name": "上市借券賣出餘額", "desc": "每日借券賣出餘額資訊"},
-        {"id": "t93bsc", "name": "上櫃借券賣出餘額", "desc": "上櫃借券賣出餘額資訊"},
-    ],
-    "ETF": [
-        {"id": "t47etf", "name": "上市ETF淨值與折溢價", "desc": "ETF 淨值、市價、折溢價率"},
-        {"id": "t47aetf", "name": "上櫃ETF淨值與折溢價", "desc": "上櫃ETF淨值與折溢價"},
+    "證券交易": [
+        {"id": "exchangeReport/STOCK_DAY_ALL", "name": "上市個股日成交資訊（全市場）", "desc": "全部上市股票當日開高低收、成交量、成交金額、成交筆數"},
+        {"id": "exchangeReport/BWIBBU_ALL", "name": "上市個股日本益比殖利率", "desc": "本益比、殖利率、股價淨值比（全市場）"},
+        {"id": "exchangeReport/MI_INDEX", "name": "大盤統計資訊", "desc": "每日大盤成交統計、漲跌家數"},
     ],
     "權證": [
-        {"id": "t187ap11_L", "name": "上市權證基本資料", "desc": "權證標的、履約價、到期日"},
-        {"id": "t187ap11_O", "name": "上櫃權證基本資料", "desc": "上櫃權證基本資料"},
-        {"id": "t187ap12_L", "name": "上市權證交易資料", "desc": "權證每日交易行情"},
-        {"id": "t187ap12_O", "name": "上櫃權證交易資料", "desc": "上櫃權證交易資料"},
+        {"id": "opendata/t187ap11_L", "name": "上市權證基本資料", "desc": "權證標的、履約價、到期日、發行人"},
+        {"id": "opendata/t187ap12_L", "name": "上市權證交易資料", "desc": "權證每日交易行情、成交量、收盤價"},
     ],
-    "公司治理ESG": [
-        {"id": "t187ap46_L_1", "name": "ESG資揭露-公概況", "desc": "員工人數、營運據點等"},
-        {"id": "t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用等"},
-        {"id": "t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數等"},
-        {"id": "t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "董事會運作、內控機制等"},
+    "券商資料": [
+        {"id": "opendata/t187ap30_L", "name": "上市券商分公司成交資訊", "desc": "各券商分公司每日成交金額與成交量"},
+        {"id": "opendata/t187ap31_L", "name": "上市券商總公司成交資訊", "desc": "各券商總公司每日成交金額與成交量"},
     ],
 }
 
-BASE_URL = "https://openapi.twse.com.tw/v1/opendata"
+# ===== TPEx 上櫃資料端點（www.tpex.org.tw）=====
+# 上櫃資料在櫃買中心 API，與 TWSE 不同主機
+TPEX_ENDPOINTS = {
+    "上櫃公司資料": [
+        {"id": "opendata/mopsfin_t187ap03_O", "name": "上櫃公司基本資料", "desc": "上櫃公司基本資料（欄位英文命名），來源：TPEx"},
+    ],
+}
+
+BASE_URL_TWSE = "https://openapi.twse.com.tw/v1"
+BASE_URL_TPEX = "https://www.tpex.org.tw/openapi/v1"
 
 
-def fetch_data(endpoint_id):
+def fetch_data(endpoint_id, base_url):
     """抓取單一端點資料"""
-    url = f"{BASE_URL}/{endpoint_id}"
+    url = f"{base_url}/{endpoint_id}"
     try:
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "TWSE-Dashboard/1.0 (GitHub-Action)"}
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            content = resp.read().decode("utf-8")
+            if not content.strip():
+                return {"error": "API 回傳空內容", "endpoint": endpoint_id, "url": url}
+            return json.loads(content)
+    except urllib.error.HTTPError as e:
+        return {"error": f"HTTP {e.code}: {e.reason}", "endpoint": endpoint_id, "url": url}
+    except urllib.error.URLError as e:
+        return {"error": f"URL Error: {e.reason}", "endpoint": endpoint_id, "url": url}
+    except json.JSONDecodeError as e:
+        # 回傳前 200 字元幫助排查
+        preview = content[:200] if 'content' in dir() else "(無法取得內容)"
+        return {"error": f"JSON 解析失敗: {str(e)}", "endpoint": endpoint_id, "url": url, "preview": preview}
     except Exception as e:
-        return {"error": str(e), "endpoint": endpoint_id}
+        return {"error": str(e), "endpoint": endpoint_id, "url": url}
 
 
 def fetch_all_data():
     """抓取所有端點資料"""
     all_data = {}
-    for category, endpoints in ENDPOINTS.items():
+
+    # 抓取 TWSE 上市資料
+    print("[TWSE] 開始抓取上市資料...")
+    for category, endpoints in TWSE_ENDPOINTS.items():
         all_data[category] = []
         for ep in endpoints:
-            print(f"  抓取: {ep['id']} - {ep['name']}")
-            data = fetch_data(ep["id"])
+            print(f"  抓取: {ep['id']}")
+            data = fetch_data(ep["id"], BASE_URL_TWSE)
             all_data[category].append({
                 **ep,
                 "data": data,
                 "count": len(data) if isinstance(data, list) else 0,
                 "has_error": isinstance(data, dict) and "error" in data
             })
+
+    # 抓取 TPEx 上櫃資料
+    print("[TPEx] 開始抓取上櫃資料...")
+    for category, endpoints in TPEX_ENDPOINTS.items():
+        if category not in all_data:
+            all_data[category] = []
+        for ep in endpoints:
+            print(f"  抓取: {ep['id']}")
+            data = fetch_data(ep["id"], BASE_URL_TPEX)
+            all_data[category].append({
+                **ep,
+                "data": data,
+                "count": len(data) if isinstance(data, list) else 0,
+                "has_error": isinstance(data, dict) and "error" in data
+            })
+
     return all_data
 
 
@@ -324,7 +336,7 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   width: 100%;
-  max-width: 900px;
+  max-width: 950px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -420,6 +432,31 @@ body {
 .tab-btn.active { background: var(--surface-2); color: var(--accent); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+.data-search-box {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  outline: none;
+  margin-bottom: 0.8rem;
+}
+.data-search-box:focus { border-color: var(--accent); }
+.data-search-box::placeholder { color: var(--muted); }
+.search-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.8rem;
+}
+.error-url {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  word-break: break-all;
+}
 .footer {
   text-align: center;
   padding: 2rem;
@@ -452,7 +489,7 @@ body {
 <header class="header">
   <div class="header-inner">
     <h1>TWSE OpenAPI 資料儀表板</h1>
-    <p>台灣證券交易所免費開放資料 API 瀏覽與查詢工具 · 每日自動更新</p>
+    <p>台灣證券交易所與櫃買中心免費開放資料 API 瀏覽與查詢工具 · 每日自動更新</p>
   </div>
 </header>
 <div class="stats-bar">
@@ -474,7 +511,7 @@ body {
   </div>
 </div>
 <div class="search-section">
-  <input type="text" class="search-box" id="searchBox" placeholder="搜尋端點名稱、代號或描述... (例如: 股利、2330、ETF)">
+  <input type="text" class="search-box" id="searchBox" placeholder="搜尋端點名稱、代號或描述... (例如: 股利、ETF、融資)">
 </div>
 <div class="filter-bar" id="filterBar">
   <button class="filter-btn active" data-category="all">全部</button>
@@ -498,6 +535,7 @@ body {
 </div>
 <footer class="footer">
   <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> ·
+     <a href="https://www.tpex.org.tw/" target="_blank">櫃買中心</a> ·
      本頁面由 GitHub Actions 自動生成</p>
 </footer>
 <script>
@@ -513,6 +551,9 @@ const tabTable = document.getElementById('tab-table');
 const tabJson = document.getElementById('tab-json');
 let currentCategory = 'all';
 let currentSearch = '';
+let currentEndpointData = null;
+let currentFilteredRows = null;
+
 function initFilters() {
   Object.keys(ENDPOINTS_META).forEach(cat => {
     const btn = document.createElement('button');
@@ -560,31 +601,85 @@ function render() {
     mainContent.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合「<strong>' + escapeHtml(currentSearch) + '</strong>」的結果</p></div>';
   }
 }
+
+function filterDataTable(searchText) {
+  if (!currentEndpointData || !Array.isArray(currentEndpointData)) return;
+  const q = searchText.toLowerCase().trim();
+  if (!q) {
+    currentFilteredRows = currentEndpointData;
+  } else {
+    currentFilteredRows = currentEndpointData.filter(row => {
+      return Object.values(row).some(val => {
+        if (val === null || val === undefined) return false;
+        return String(val).toLowerCase().includes(q);
+      });
+    });
+  }
+  renderDataTable(currentFilteredRows, q);
+}
+
+function renderDataTable(rows, highlightText) {
+  if (!rows || rows.length === 0) {
+    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合搜尋條件的資料</p></div>';
+    return;
+  }
+  const columns = Object.keys(rows[0]);
+  let tableHtml = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
+  columns.forEach(col => { tableHtml += '<th>' + escapeHtml(col) + '</th>'; });
+  tableHtml += '</tr></thead><tbody>';
+  rows.slice(0, 200).forEach(row => {
+    tableHtml += '<tr>';
+    columns.forEach(col => {
+      const val = row[col];
+      const display = val === null || val === undefined ? '' : String(val);
+      let cellHtml = escapeHtml(display);
+      if (highlightText && highlightText.trim()) {
+        const regex = new RegExp('(' + escapeRegExp(highlightText) + ')', 'gi');
+        cellHtml = cellHtml.replace(regex, '<mark style="background:rgba(56,189,248,0.3);color:var(--accent);border-radius:3px;padding:1px 3px;">$1</mark>');
+      }
+      tableHtml += '<td title="' + escapeHtml(display) + '">' + cellHtml + '</td>';
+    });
+    tableHtml += '</tr>';
+  });
+  if (rows.length > 200) {
+    tableHtml += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (rows.length - 200) + ' 筆資料，請使用搜尋縮小範圍或切換 JSON 分頁</td></tr>';
+  }
+  tableHtml += '</tbody></table></div>';
+  tabTable.innerHTML = tableHtml;
+}
+
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function openModal(ep, category) {
   modalTitle.textContent = ep.name + ' (' + ep.id + ')';
   const jsonStr = JSON.stringify(ep.data, null, 2);
   tabJson.innerHTML = '<pre class="json-preview">' + escapeHtml(jsonStr) + '</pre>';
+
   if (Array.isArray(ep.data) && ep.data.length > 0) {
-    const columns = Object.keys(ep.data[0]);
-    let tableHtml = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
-    columns.forEach(col => { tableHtml += '<th>' + escapeHtml(col) + '</th>'; });
-    tableHtml += '</tr></thead><tbody>';
-    ep.data.slice(0, 200).forEach(row => {
-      tableHtml += '<tr>';
-      columns.forEach(col => {
-        const val = row[col];
-        const display = val === null || val === undefined ? '' : String(val);
-        tableHtml += '<td title="' + escapeHtml(display) + '">' + escapeHtml(display) + '</td>';
-      });
-      tableHtml += '</tr>';
+    currentEndpointData = ep.data;
+    currentFilteredRows = ep.data;
+
+    const searchContainer = document.createElement('div');
+    searchContainer.innerHTML = '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等關鍵字">' +
+      '<div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>';
+    tabTable.innerHTML = '';
+    tabTable.appendChild(searchContainer);
+
+    const dataSearchBox = document.getElementById('dataSearchBox');
+    dataSearchBox.addEventListener('input', (e) => {
+      filterDataTable(e.target.value);
     });
-    if (ep.data.length > 200) {
-      tableHtml += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (ep.data.length - 200) + ' 筆資料，請切換 JSON 分頁查看完整內容</td></tr>';
-    }
-    tableHtml += '</tbody></table></div>';
-    tabTable.innerHTML = tableHtml;
+
+    renderDataTable(currentFilteredRows, '');
   } else if (ep.has_error) {
-    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓取失敗</p><pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre></div>';
+    let errorHtml = '<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓取失敗</p><pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre>';
+    if (ep.data && ep.data.url) {
+      errorHtml += '<div class="error-url">請求 URL: ' + escapeHtml(ep.data.url) + '</div>';
+    }
+    errorHtml += '</div>';
+    tabTable.innerHTML = errorHtml;
   } else {
     tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>';
   }
@@ -596,6 +691,8 @@ function openModal(ep, category) {
 function closeModal() {
   modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
+  currentEndpointData = null;
+  currentFilteredRows = null;
 }
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -624,17 +721,17 @@ render();
 
 def generate_html(all_data):
     """生成靜態 HTML 網站"""
-    total_endpoints = sum(len(eps) for eps in ENDPOINTS.values())
+    total_endpoints = sum(len(eps) for eps in all_data.values())
     total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
     error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
 
     data_json = json.dumps(all_data, ensure_ascii=False, default=str)
-    endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in ENDPOINTS.items()}, ensure_ascii=False)
+    endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in all_data.items()}, ensure_ascii=False)
 
     return HTML_TEMPLATE.substitute(
         total_endpoints=total_endpoints,
         total_records=f"{total_records:,}",
-        category_count=len(ENDPOINTS),
+        category_count=len(all_data),
         error_count=error_count,
         error_color='var(--danger)' if error_count > 0 else 'var(--success)',
         data_json=data_json,
@@ -645,7 +742,7 @@ def generate_html(all_data):
 def main():
     public_dir = Path("public")
     public_dir.mkdir(exist_ok=True)
-    print("開始抓取 TWSE OpenAPI 資料...")
+    print("開始抓取 TWSE / TPEx OpenAPI 資料...")
     all_data = fetch_all_data()
     print("生成靜態網站...")
     html = generate_html(all_data)
@@ -655,7 +752,7 @@ def main():
     data_path.write_text(json.dumps(all_data, ensure_ascii=False, indent=2), encoding="utf-8")
     total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
     error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
-    print(f"完成！總記錄數: {total_records:,}，異常端點: {error_count}")
+    print(f"成！總記錄數: {total_records:,}，異常端點: {error_count}")
 
 
 if __name__ == "__main__":
