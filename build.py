@@ -7,7 +7,6 @@ TWSE OpenAPI Dashboard Builder
 import json
 import urllib.request
 from pathlib import Path
-from string import Template
 
 # ===== TWSE 上市資料端點（openapi.twse.com.tw/v1）=====
 TWSE_ENDPOINTS = {
@@ -15,7 +14,7 @@ TWSE_ENDPOINTS = {
         {"id": "opendata/t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、資本額、成立日期、董監事"},
         {"id": "opendata/t187ap04_L", "name": "上市公司董事監察人資料", "desc": "董監事姓名、職稱、選任時持股、持有股份"},
         {"id": "opendata/t187ap05_L", "name": "上市公司每月營業收入", "desc": "當月營收、上月營收、去年同月、增減百分比"},
-        {"id": "opendata/t187ap45_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期、股東會日期"},
+        {"id": "opendata/t187ap45_L", "name": "上市公司利分派情形", "desc": "現金股利、股票股利、除權息日期、股東會日期"},
         {"id": "opendata/t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點、產品與服務等"},
         {"id": "opendata/t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用、水資源管理等"},
         {"id": "opendata/t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數、職業安全衛生等"},
@@ -41,10 +40,9 @@ TWSE_ENDPOINTS = {
 }
 
 # ===== TPEx 上櫃資料端點（www.tpex.org.tw/openapi/v1）=====
-# 來源：TPEx OpenAPI swagger.json
 TPEX_ENDPOINTS = {
     "上櫃公司資料": [
-        {"id": "mopsfin_t187ap03_O", "name": "上櫃公司基本料", "desc": "上櫃公司基本資料（欄位英文命名）"},
+        {"id": "mopsfin_t187ap03_O", "name": "上櫃公司基本資料", "desc": "上櫃公司基本資料（欄位英文命名）"},
     ],
     "上櫃股票行情": [
         {"id": "tpex_mainboard_daily_close_quotes", "name": "上櫃股票行情", "desc": "上櫃股票每日開高低收、成交量、成交金額"},
@@ -56,16 +54,16 @@ TPEX_ENDPOINTS = {
     ],
     "上櫃融資融券": [
         {"id": "tpex_mainboard_margin_balance", "name": "上櫃融資融券餘額", "desc": "上櫃股票融資餘額、融券餘額"},
-        {"id": "tpex_margin_sbl", "name": "上櫃融券券賣出餘額", "desc": "上櫃股票融券借券賣出餘額"},
+        {"id": "tpex_margin_sbl", "name": "上櫃融券借券賣出餘額", "desc": "上櫃股票融券借券賣出餘額"},
     ],
     "上櫃除權除息": [
-        {"id": "tpex_exright_daily", "name": "上櫃除權除息計算結果", "desc": "上櫃股票除權除息計算結果表"},
+        {"id": "tpex_exright_daily", "name": "上櫃除權除息計算結果", "desc": "上櫃股票除權除計算結果表"},
         {"id": "tpex_exright_prepost", "name": "上櫃除權除息預告", "desc": "上櫃股票除權除息預告表"},
     ],
     "上櫃其他": [
         {"id": "tpex_odd_stock", "name": "上櫃零股交易資訊", "desc": "上櫃股票零股交易行情"},
         {"id": "tpex_off_market", "name": "上櫃盤後定價行情", "desc": "上櫃股票盤後定價交易行情"},
-        {"id": "tpex_cmode", "name": "上櫃變更交易資訊", "desc": "變更交易、分盤交易、管理股票與停止交易資訊"},
+        {"id": "tpex_cmode", "name": "上櫃變更交易資訊", "desc": "變更交易、分盤交易、管理股票與停交易資訊"},
         {"id": "tpex_index", "name": "櫃買指數歷史資料", "desc": "櫃買指數歷史收盤資料"},
         {"id": "tpex50_index", "name": "富櫃50指數", "desc": "富櫃50指數歷史收盤指數"},
     ],
@@ -133,7 +131,7 @@ def fetch_all_data():
     return all_data
 
 
-HTML_TEMPLATE = Template("""<!DOCTYPE html>
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -513,19 +511,19 @@ body {
 </header>
 <div class="stats-bar">
   <div class="stat-card">
-    <div class="stat-value">$total_endpoints</div>
+    <div class="stat-value">{{TOTAL_ENDPOINTS}}</div>
     <div class="stat-label">API 端點</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">$total_records</div>
+    <div class="stat-value">{{TOTAL_RECORDS}}</div>
     <div class="stat-label">總記錄數</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">$category_count</div>
+    <div class="stat-value">{{CATEGORY_COUNT}}</div>
     <div class="stat-label">資料類別</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value" style="color: $error_color;">$error_count</div>
+    <div class="stat-value" style="color: {{ERROR_COLOR}};">{{ERROR_COUNT}}</div>
     <div class="stat-label">異常端點</div>
   </div>
 </div>
@@ -558,8 +556,8 @@ body {
      本頁面由 GitHub Actions 自動生成</p>
 </footer>
 <script>
-const API_DATA = $data_json;
-const ENDPOINTS_META = $endpoints_json;
+const API_DATA = {{DATA_JSON}};
+const ENDPOINTS_META = {{ENDPOINTS_JSON}};
 const searchBox = document.getElementById('searchBox');
 const filterBar = document.getElementById('filterBar');
 const mainContent = document.getElementById('mainContent');
@@ -681,7 +679,7 @@ function openModal(ep, category) {
     currentFilteredRows = ep.data;
 
     const searchContainer = document.createElement('div');
-    searchContainer.innerHTML = '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等關鍵字">' +
+    searchContainer.innerHTML = '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等鍵字">' +
       '<div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>';
     tabTable.innerHTML = '';
     tabTable.appendChild(searchContainer);
@@ -735,7 +733,7 @@ initFilters();
 render();
 </script>
 </body>
-</html>""")
+</html>"""
 
 
 def generate_html(all_data):
@@ -747,15 +745,15 @@ def generate_html(all_data):
     data_json = json.dumps(all_data, ensure_ascii=False, default=str)
     endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in all_data.items()}, ensure_ascii=False)
 
-    return HTML_TEMPLATE.substitute(
-        total_endpoints=total_endpoints,
-        total_records=f"{total_records:,}",
-        category_count=len(all_data),
-        error_count=error_count,
-        error_color='var(--danger)' if error_count > 0 else 'var(--success)',
-        data_json=data_json,
-        endpoints_json=endpoints_json,
-    )
+    html = HTML_TEMPLATE
+    html = html.replace("{{TOTAL_ENDPOINTS}}", str(total_endpoints))
+    html = html.replace("{{TOTAL_RECORDS}}", f"{total_records:,}")
+    html = html.replace("{{CATEGORY_COUNT}}", str(len(all_data)))
+    html = html.replace("{{ERROR_COUNT}}", str(error_count))
+    html = html.replace("{{ERROR_COLOR}}", 'var(--danger)' if error_count > 0 else 'var(--success)')
+    html = html.replace("{{DATA_JSON}}", data_json)
+    html = html.replace("{{ENDPOINTS_JSON}}", endpoints_json)
+    return html
 
 
 def main():
