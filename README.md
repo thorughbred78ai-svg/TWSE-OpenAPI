@@ -1,112 +1,201 @@
 # TWSE-OpenAPI
 
-# TWSE OpenAPI Dashboard
+# TWSE 上市個股及大盤統計資訊儀表板
 
-台灣證券交易所免費開放資料 API 瀏覽與查詢工具，透過 GitHub Actions 每日自動抓取最新資料並部署為靜態網站。
+自動從臺灣證券交易所（TWSE）免費 OpenAPI 抓取上市股票核心資料，每日透過 GitHub Actions 建置並部署為靜態網站，發佈於 GitHub Pages。
 
-## 功能特色
+---
 
-- **免費資料來源**：直接串接臺灣證券交易所 OpenAPI，無需註冊、無需 API Key
-- **每日自動更新**：透過 GitHub Actions 排程自動抓取最新資料
-- **網頁即時查詢**：搜尋端點名稱、代號或描述，快速找到所需資料
-- **資料表格瀏覽**：點擊端點卡片即可查看資料表格與 JSON 原始資料
-- **分類瀏覽**依資料類別（公司基本資料、股利、每日交易、指數、融資融券等）篩選
+## 功能特性
 
-## 涵蓋資料類別
+- **6 大核心資料頁籤**：大盤統計、個股日成交、本益比殖利率、每月營業收入、股利分派、公司基本資料
+- **即時關鍵字搜尋**：每個頁籤獨立搜尋框，支援股票代號（如 `2330`）與公司名稱（如 `台積電`）搜尋
+- **欄位排序**：點擊任意表格標題即可排序，自動解析數值（含逗號分隔與百分比格式）
+- **產業別篩選**：在「上市公司基本資料」頁籤可選擇產業別進行篩選
+- **每日自動更新**：透過 GitHub Actions 定時執行，無需手動維護
+- **全免費**：使用 TWSE 公開 API，無需 API Key
 
-| 類別 | 端點範例 |
-|------|----------|
-| 公司基本資料 | 上市公司基本資料、董監事資料 |
-| 股利與除權息 | 股利分派、除權息參考價 |
-| 每日交易 | 收盤行情、本益比、殖利率 |
-| 指數 | 大盤統計、各類指數收盤 |
-| 融資融券 | 融資餘額、融券餘額 |
-| 借券 | 借券賣出餘額、借券成交明細 |
-| ETF | ETF 淨值與折溢價 |
-| 權證 | 權證基本資料、交易資料 |
-| ESG | 企業 ESG 資訊揭露 |
+---
 
-## 快速開始
+## 資料來源
 
-### 1. 建立 GitHub 儲存庫
+| 頁籤 | API 端點 | 說明 |
+|---|---|---|
+| 大盤統計資訊 | `exchangeReport/MI_INDEX` | 每日大盤成交統計、漲跌家數 |
+| 上市個股日成交資訊 | `exchangeReport/STOCK_DAY_ALL` | 全部上市股票當日開高低收、成交量、成交金額 |
+| 上市個股本益比殖利率 | `exchangeReport/BWIBBU_ALL` | 本益比、殖利率、股價淨值比 |
+| 上市公司每月營業收入 | `opendata/t187ap05_L` | 當月營收、上月營收、去年同月、增減百分比 |
+| 上市公司股利分派情形 | `opendata/t187ap45_L` | 現金股利、股票股利、除權息日期、股東會日期 |
+| 上市公司基本資料 | `opendata/t187ap03_L` | 公司全名、產業別、統一編號、資本額、成立日期 |
 
-1. 在 GitHub 建立一個新儲存庫（例如 `twse-api-dashboard`）
-2. 將以下檔案上傳到儲存庫根目錄：
-   - `.github/workflows/twse-api-dashboard.yml`
-   - `build.py`
+所有資料來自 [臺灣證券交易所 OpenAPI](https://openapi.twse.com.tw/)。
 
-### 2. 設定 Actions 權限
+---
 
-1. 前往 **Settings → Actions → General**
-2. 找到 **Workflow permissions**
-3. 選擇 **Read and write permissions**
-4. 點擊 **Save**
+## 線上預覽
 
-### 3. 手動觸發第一次建置
+部署網址：`https://<你的使用者名稱>.github.io/<儲存庫名稱>/`
 
-1. 前往 **Actions → Build and Deploy TWSE API Dashboard**
-2. 點擊 **Run workflow → Run workflow**
-3. 等待建置完成（約 2-3 分鐘）
+---
 
-### 4. 設定 GitHub Pages
-
-1. 前往 **Settings → Pages**
-2. **Source** 選擇 **Deploy from a branch**
-3. **Branch** 選擇 `gh-pages / root`
-4. 點擊 **Save**
-5. 等待 1-2 分鐘，上方會顯示 GitHub Pages URL
-
-### 5. 自動排程
-
-Workflow 已設定每天台灣時間下午 2 點（UTC 06:00）自動執行，無需額外設定。
-
-## 檔案結構
+## 專案結構
 
 ```
 .
 ├── .github/
 │   └── workflows/
-│       └── twse-api-dashboard.yml   # GitHub Actions 工作流程
-├── build.py                          # 網站建置腳本
-├── public/                           # 建置輸出目錄（自動生成）
-│   ├── index.html                    # 主網站
-│   └── data.json                     # 原始資料 JSON
-└── README.md
+│       └─ twse-api-dashboard.yml    # GitHub Actions 工作流程
+├── build.py                           # 資料抓取與網站產生腳本
+├── public/                            # 產物目錄（Actions 自動產生）
+│   ├── index.html                     # 靜態儀表板網頁
+│   └── data.json                      # 原始 JSON 資料
+└── README.md                          # 本檔案
 ```
 
-## 自訂端點
+---
 
-如需新增或移除 API 端點，請編輯 `build.py` 中的 `ENDPOINTS` 字典：
+## 快速開始
 
-```python
-ENDPOINTS = {
-    "你的類別名稱": [
-        {"id": "端點代號", "name": "顯示名稱", "desc": "描述說明"},
-        # ...
-    ],
-}
+### 1. 複製儲存庫
+
+```bash
+git clone https://github.com/<你的使用者名稱>/<儲存庫名稱>.git
+cd <儲存庫名稱>
 ```
 
-端點代號可參考 [臺灣證券交易所 OpenAPI 文件](https://openapi.twse.com.tw/)。
+### 2. 本地執行建置
 
-## 疑難排解
+```bash
+python build.py
+```
 
-### gh-pages 分支未建立
+執行後會在 `public/` 目錄產生 `index.html` 與 `data.json`。直接用瀏覽器開啟 `public/index.html` 即可預覽。
 
-1. 確認 **Settings → Actions → General → Workflow permissions** 已設為 **Read and write permissions**
-2. 確認 `build.py` 和 `.github/workflows/twse-api-dashboard.yml` 已上傳到 main 分支
-3. 重新執行 workflow
-4. 如果仍失敗，可手動建立 gh-pages 分支：前往儲存庫主頁，點擊分支下拉選單，輸入 `gh-pages`，選擇「Create branch gh-pages from main」
+---
 
-### 網站顯示的是 README 內容
+## GitHub Actions 自動部署
 
-請確認 **Settings → Pages → Branch** 設定為 `gh-pages / root`，不是 `main / root`。
+本專案已設定 GitHub Actions 工作流程，每日 UTC 06:00 自動抓取最新資料並部署至 GitHub Pages。
 
-## 資料來源
+### 設定步驟
 
-- [臺灣證券交易所 OpenAPI](https://openapi.twse.com.tw/)
-- [證券櫃檯買賣中心 OpenAPI](https://www.tpex.org.tw/openapi/)
+1. **上傳程式碼**
+   ```bash
+   git add build.py .github/workflows/twse-api-dashboard.yml README.md
+   git commit -m "Initial commit"
+   git push origin main
+   ```
+
+2. **設定 GitHub Pages**
+   - 前往儲存庫 **Settings → Pages**
+   - **Source** 選擇 **Deploy from a branch**
+   - **Branch** 選擇 `gh-pages` / `root`
+   - 點擊 **Save**
+
+3. **手動觸發建置**
+   - 前往 **Actions → Build and Deploy TWSE API Dashboard**
+   - 點擊 **Run workflow → Run workflow**
+
+4. **等待部署完成**
+   - 工作流程約 1-2 分鐘完成
+   - 完成後即可透過 GitHub Pages 網址瀏覽
+
+---
+
+## 使用說
+
+### 搜尋資料
+
+- 在每個頁籤頂部的搜尋框輸入關鍵字
+- 支援股票代號（如 `2330`）或公司名稱（如 `台積電`）
+- 搜尋結果即時篩選，符合的文字會以高亮標記
+
+### 排序資料
+
+- 點擊表格任意標題欄位即可排序
+- 點擊順序：**升序 → 降序 → 恢復原始順序**
+- 數值欄位（如成交金額、本益比、殖利率）會自動解析並按數值大小排序
+- 文字欄位則按字母/筆畫排序
+
+### 產業別篩選
+
+- 在「上市公司基本資料」頁籤，頂部搜尋框右側會顯示「產業別」下拉選單
+- 選擇特定產業別後，表格只顯示該產業的公司
+- 可搭配搜尋框同時使用
+
+---
+
+## 工作流程設定檔
+
+`.github/workflows/twse-api-dashboard.yml`：
+
+```yaml
+name: Build and Deploy TWSE API Dashboard
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # 每日 UTC 06:00 執行
+  workflow_dispatch:       # 支援手動觸發
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build site
+        run: python build.py
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+```
+
+---
+
+## 注意事項
+
+- TWSE OpenAPI 為免費公開資料，**無需申請 API Key**
+- 資料更新頻率為每日，建置時間為 UTC 06:00（台灣時間 14:00）
+- 若 API 端點暫時無法存取，頁面會顯示異常狀態並保留上次成功建置的資料
+- 本專案僅供資訊參考，不構成任何投資建議
+
+---
+
+## 技術棧
+
+- **資料抓取**：Python 3 + `urllib`
+- **靜態網站**：純 HTML / CSS / JavaScript（無框架依賴）
+- **部署**：GitHub Actions + GitHub Pages
+- **字型**：Noto Sans TC、JetBrains Mono
+
+---
 
 ## 授權
 
-本專案採用 MIT 授權。資料來源為臺灣證券交易所開放資料，依政府資料開放授權條款用。
+本專案程式碼採用 MIT License。資料來源與版權歸臺灣證券交易所所有。
+
+---
+
+## 致謝
+
+- [臺灣證券交易所 OpenAPI](https://openapi.twse.com.tw/)
+- [peaceiris/actions-gh-pages](https://github.com/peaceiris/actions-gh-pages)
