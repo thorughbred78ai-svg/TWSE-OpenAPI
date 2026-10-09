@@ -9,8 +9,7 @@ import urllib.request
 from pathlib import Path
 from string import Template
 
-# ===== TWSE 上市資料端點（openapi.twse.com.tw）=====
-# 這些端點經過驗證，確實存在於 TWSE OpenAPI
+# ===== TWSE 上市資料端點（openapi.twse.com.tw/v1）=====
 TWSE_ENDPOINTS = {
     "公司治理": [
         {"id": "opendata/t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、資本額、成立日期、董監事"},
@@ -41,11 +40,34 @@ TWSE_ENDPOINTS = {
     ],
 }
 
-# ===== TPEx 上櫃資料端點（www.tpex.org.tw）=====
-# 上櫃資料在櫃買中心 API，與 TWSE 不同主機
+# ===== TPEx 上櫃資料端點（www.tpex.org.tw/openapi/v1）=====
+# 來源：TPEx OpenAPI swagger.json
 TPEX_ENDPOINTS = {
     "上櫃公司資料": [
-        {"id": "opendata/mopsfin_t187ap03_O", "name": "上櫃公司基本資料", "desc": "上櫃公司基本資料（欄位英文命名），來源：TPEx"},
+        {"id": "mopsfin_t187ap03_O", "name": "上櫃公司基本料", "desc": "上櫃公司基本資料（欄位英文命名）"},
+    ],
+    "上櫃股票行情": [
+        {"id": "tpex_mainboard_daily_close_quotes", "name": "上櫃股票行情", "desc": "上櫃股票每日開高低收、成交量、成交金額"},
+        {"id": "tpex_mainboard_quotes", "name": "上櫃股票收盤行情", "desc": "上櫃股票收盤行情資料"},
+        {"id": "tpex_mainborad_highlight", "name": "上櫃股票市場現況", "desc": "上櫃市場整體現況統計"},
+    ],
+    "上櫃本益比殖利率": [
+        {"id": "tpex_mainboard_peratio_analysis", "name": "上櫃個股本益比殖利率", "desc": "上櫃股票本益比、殖利率、股價淨值比"},
+    ],
+    "上櫃融資融券": [
+        {"id": "tpex_mainboard_margin_balance", "name": "上櫃融資融券餘額", "desc": "上櫃股票融資餘額、融券餘額"},
+        {"id": "tpex_margin_sbl", "name": "上櫃融券券賣出餘額", "desc": "上櫃股票融券借券賣出餘額"},
+    ],
+    "上櫃除權除息": [
+        {"id": "tpex_exright_daily", "name": "上櫃除權除息計算結果", "desc": "上櫃股票除權除息計算結果表"},
+        {"id": "tpex_exright_prepost", "name": "上櫃除權除息預告", "desc": "上櫃股票除權除息預告表"},
+    ],
+    "上櫃其他": [
+        {"id": "tpex_odd_stock", "name": "上櫃零股交易資訊", "desc": "上櫃股票零股交易行情"},
+        {"id": "tpex_off_market", "name": "上櫃盤後定價行情", "desc": "上櫃股票盤後定價交易行情"},
+        {"id": "tpex_cmode", "name": "上櫃變更交易資訊", "desc": "變更交易、分盤交易、管理股票與停止交易資訊"},
+        {"id": "tpex_index", "name": "櫃買指數歷史資料", "desc": "櫃買指數歷史收盤資料"},
+        {"id": "tpex50_index", "name": "富櫃50指數", "desc": "富櫃50指數歷史收盤指數"},
     ],
 }
 
@@ -71,7 +93,6 @@ def fetch_data(endpoint_id, base_url):
     except urllib.error.URLError as e:
         return {"error": f"URL Error: {e.reason}", "endpoint": endpoint_id, "url": url}
     except json.JSONDecodeError as e:
-        # 回傳前 200 字元幫助排查
         preview = content[:200] if 'content' in dir() else "(無法取得內容)"
         return {"error": f"JSON 解析失敗: {str(e)}", "endpoint": endpoint_id, "url": url, "preview": preview}
     except Exception as e:
@@ -82,7 +103,6 @@ def fetch_all_data():
     """抓取所有端點資料"""
     all_data = {}
 
-    # 抓取 TWSE 上市資料
     print("[TWSE] 開始抓取上市資料...")
     for category, endpoints in TWSE_ENDPOINTS.items():
         all_data[category] = []
@@ -96,7 +116,6 @@ def fetch_all_data():
                 "has_error": isinstance(data, dict) and "error" in data
             })
 
-    # 抓取 TPEx 上櫃資料
     print("[TPEx] 開始抓取上櫃資料...")
     for category, endpoints in TPEX_ENDPOINTS.items():
         if category not in all_data:
@@ -535,7 +554,7 @@ body {
 </div>
 <footer class="footer">
   <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> ·
-     <a href="https://www.tpex.org.tw/" target="_blank">櫃買中心</a> ·
+     <a href="https://www.tpex.org.tw/openapi/" target="_blank">櫃買中心 OpenAPI</a> ·
      本頁面由 GitHub Actions 自動生成</p>
 </footer>
 <script>
@@ -752,7 +771,7 @@ def main():
     data_path.write_text(json.dumps(all_data, ensure_ascii=False, indent=2), encoding="utf-8")
     total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
     error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
-    print(f"成！總記錄數: {total_records:,}，異常端點: {error_count}")
+    print(f"完成！總記錄數: {total_records:,}，異常端點: {error_count}")
 
 
 if __name__ == "__main__":
