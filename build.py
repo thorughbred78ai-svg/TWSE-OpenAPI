@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 TWSE OpenAPI Dashboard Builder
@@ -14,7 +15,7 @@ TWSE_ENDPOINTS = {
         {"id": "opendata/t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、資本額、成立日期、董監事"},
         {"id": "opendata/t187ap04_L", "name": "上市公司董事監察人資料", "desc": "董監事姓名、職稱、選任時持股、持有股份"},
         {"id": "opendata/t187ap05_L", "name": "上市公司每月營業收入", "desc": "當月營收、上月營收、去年同月、增減百分比"},
-        {"id": "opendata/t187ap45_L", "name": "上市公司利分派情形", "desc": "現金股利、股票股利、除權息日期、股東會日期"},
+        {"id": "opendata/t187ap45_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期、股東會日期"},
         {"id": "opendata/t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點、產品與服務等"},
         {"id": "opendata/t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用、水資源管理等"},
         {"id": "opendata/t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數、職業安全衛生等"},
@@ -57,13 +58,13 @@ TPEX_ENDPOINTS = {
         {"id": "tpex_margin_sbl", "name": "上櫃融券借券賣出餘額", "desc": "上櫃股票融券借券賣出餘額"},
     ],
     "上櫃除權除息": [
-        {"id": "tpex_exright_daily", "name": "上櫃除權除息計算結果", "desc": "上櫃股票除權除計算結果表"},
+        {"id": "tpex_exright_daily", "name": "上櫃除權除息計算結果", "desc": "上櫃股票除權除息計算結果表"},
         {"id": "tpex_exright_prepost", "name": "上櫃除權除息預告", "desc": "上櫃股票除權除息預告表"},
     ],
     "上櫃其他": [
         {"id": "tpex_odd_stock", "name": "上櫃零股交易資訊", "desc": "上櫃股票零股交易行情"},
         {"id": "tpex_off_market", "name": "上櫃盤後定價行情", "desc": "上櫃股票盤後定價交易行情"},
-        {"id": "tpex_cmode", "name": "上櫃變更交易資訊", "desc": "變更交易、分盤交易、管理股票與停交易資訊"},
+        {"id": "tpex_cmode", "name": "上櫃變更交易資訊", "desc": "變更交易、分盤交易、管理股票與停止交易資訊"},
         {"id": "tpex_index", "name": "櫃買指數歷史資料", "desc": "櫃買指數歷史收盤資料"},
         {"id": "tpex50_index", "name": "富櫃50指數", "desc": "富櫃50指數歷史收盤指數"},
     ],
@@ -459,7 +460,7 @@ body {
   border-radius: 8px;
   color: var(--ink);
   outline: none;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.5rem;
 }
 .data-search-box:focus { border-color: var(--accent); }
 .data-search-box::placeholder { color: var(--muted); }
@@ -467,6 +468,12 @@ body {
   font-size: 0.8rem;
   color: var(--muted);
   margin-bottom: 0.8rem;
+}
+.result-count {
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
 }
 .error-url {
   font-size: 0.75rem;
@@ -570,6 +577,7 @@ let currentCategory = 'all';
 let currentSearch = '';
 let currentEndpointData = null;
 let currentFilteredRows = null;
+let currentDataSearch = '';
 
 function initFilters() {
   Object.keys(ENDPOINTS_META).forEach(cat => {
@@ -620,6 +628,7 @@ function render() {
 }
 
 function filterDataTable(searchText) {
+  currentDataSearch = searchText;
   if (!currentEndpointData || !Array.isArray(currentEndpointData)) return;
   const q = searchText.toLowerCase().trim();
   if (!q) {
@@ -633,11 +642,26 @@ function filterDataTable(searchText) {
     });
   }
   renderDataTable(currentFilteredRows, q);
+  updateResultCount(currentFilteredRows.length, currentEndpointData.length);
+}
+
+function updateResultCount(filtered, total) {
+  const countEl = document.getElementById('resultCount');
+  if (countEl) {
+    if (currentDataSearch && currentDataSearch.trim()) {
+      countEl.textContent = '顯示 ' + filtered.toLocaleString() + ' / ' + total.toLocaleString() + ' 筆資料';
+    } else {
+      countEl.textContent = '共 ' + total.toLocaleString() + ' 筆資料';
+    }
+  }
 }
 
 function renderDataTable(rows, highlightText) {
+  const tableContainer = document.getElementById('tableContainer');
+  if (!tableContainer) return;
+
   if (!rows || rows.length === 0) {
-    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合搜尋條件的資料</p></div>';
+    tableContainer.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合搜尋條件的資料</p></div>';
     return;
   }
   const columns = Object.keys(rows[0]);
@@ -662,7 +686,7 @@ function renderDataTable(rows, highlightText) {
     tableHtml += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (rows.length - 200) + ' 筆資料，請使用搜尋縮小範圍或切換 JSON 分頁</td></tr>';
   }
   tableHtml += '</tbody></table></div>';
-  tabTable.innerHTML = tableHtml;
+  tableContainer.innerHTML = tableHtml;
 }
 
 function escapeRegExp(string) {
@@ -677,15 +701,16 @@ function openModal(ep, category) {
   if (Array.isArray(ep.data) && ep.data.length > 0) {
     currentEndpointData = ep.data;
     currentFilteredRows = ep.data;
+    currentDataSearch = '';
 
-    const searchContainer = document.createElement('div');
-    searchContainer.innerHTML = '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等鍵字">' +
-      '<div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>';
-    tabTable.innerHTML = '';
-    tabTable.appendChild(searchContainer);
+    tabTable.innerHTML =
+      '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等關鍵字">' +
+      '<div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>' +
+      '<div class="result-count" id="resultCount">共 ' + ep.data.length.toLocaleString() + ' 筆資料</div>' +
+      '<div id="tableContainer"></div>';
 
     const dataSearchBox = document.getElementById('dataSearchBox');
-    dataSearchBox.addEventListener('input', (e) => {
+    dataSearchBox.addEventListener('input', function(e) {
       filterDataTable(e.target.value);
     });
 
@@ -710,6 +735,7 @@ function closeModal() {
   document.body.style.overflow = '';
   currentEndpointData = null;
   currentFilteredRows = null;
+  currentDataSearch = '';
 }
 function escapeHtml(text) {
   const div = document.createElement('div');
