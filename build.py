@@ -1,64 +1,164 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-TWSE 上市個股及大盤統計資訊儀表板 (圖示化版)
+TWSE 上市個股及大盤統計資訊儀表板
+修正版：修正 JavaScript 排序事件、產生 SVG 網站圖示。
 """
 
 import json
 import urllib.request
+import urllib.error
 from pathlib import Path
 
+
+# ============================================================
+# TWSE OpenAPI 端點設定
+# ============================================================
+
 ENDPOINTS = [
-    {"id": "exchangeReport/MI_INDEX", "tab_id": "mi_index", "title": "大盤統計資訊", "icon": "📊", "color": "#38bdf8", "desc": "每日大盤成交統計、漲跌家數", "category": "大盤"},
-    {"id": "exchangeReport/STOCK_DAY_ALL", "tab_id": "stock_day", "title": "上市個股日成交資訊", "icon": "📈", "color": "#34d399", "desc": "全部上市股票當日開高低收、成交量、成交金額", "category": "成交"},
-    {"id": "exchangeReport/BWIBBU_ALL", "tab_id": "bwibbu", "title": "上市個股本益比殖利率", "icon": "💰", "color": "#fbbf24", "desc": "本益比、殖利率、股價淨值比", "category": "估值"},
-    {"id": "opendata/t187ap05_L", "tab_id": "revenue", "title": "上市公司每月營業收入", "icon": "📋", "color": "#a78bfa", "desc": "當月營收、上月營收、去年同月、增減百分比", "category": "財務"},
-    {"id": "opendata/t187ap45_L", "tab_id": "dividend", "title": "上市公司股利分派情形", "icon": "🎁", "color": "#f472b6", "desc": "現金股利、股票股利、除權息日期", "category": "股利"},
-    {"id": "opendata/t187ap03_L", "tab_id": "company", "title": "上市公司基本資料", "icon": "🏢", "color": "#fb923c", "desc": "公司全名、產業別、資本額、成立日期", "category": "公司資料"},
+    {
+        "id": "exchangeReport/MI_INDEX",
+        "tab_id": "mi_index",
+        "title": "大盤統計資訊",
+        "icon": "📊",
+        "color": "#38bdf8",
+        "desc": "每日大盤成交統計、漲跌家數",
+        "category": "大盤",
+    },
+    {
+        "id": "exchangeReport/STOCK_DAY_ALL",
+        "tab_id": "stock_day",
+        "title": "上市個股日成交資訊",
+        "icon": "📈",
+        "color": "#34d399",
+        "desc": "全部上市股票當日開高低收、成交量、成交金額",
+        "category": "成交",
+    },
+    {
+        "id": "exchangeReport/BWIBBU_ALL",
+        "tab_id": "bwibbu",
+        "title": "上市個股本益比殖利率",
+        "icon": "💰",
+        "color": "#fbbf24",
+        "desc": "本益比、殖利率、股價淨值比",
+        "category": "估值",
+    },
+    {
+        "id": "opendata/t187ap05_L",
+        "tab_id": "revenue",
+        "title": "上市公司每月營業收入",
+        "icon": "📋",
+        "color": "#a78bfa",
+        "desc": "當月營收、上月營收、去年同月、增減百分比",
+        "category": "財務",
+    },
+    {
+        "id": "opendata/t187ap45_L",
+        "tab_id": "dividend",
+        "title": "上市公司股利分派情形",
+        "icon": "🎁",
+        "color": "#f472b6",
+        "desc": "現金股利、股票股利、除權息日期",
+        "category": "股利",
+    },
+    {
+        "id": "opendata/t187ap03_L",
+        "tab_id": "company",
+        "title": "上市公司基本資料",
+        "icon": "🏢",
+        "color": "#fb923c",
+        "desc": "公司全名、產業別、資本額、成立日期",
+        "category": "公司資料",
+    },
 ]
 
 BASE_URL = "https://openapi.twse.com.tw/v1"
 
 
+# ============================================================
+# 抓取 API 資料
+# ============================================================
+
 def fetch_data(endpoint_id):
+    """取得指定 TWSE API 資料，並處理常見錯誤。"""
     url = f"{BASE_URL}/{endpoint_id}"
+
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "TWSE-Dashboard/1.0"})
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "TWSE-Dashboard/1.0"},
+        )
+
         with urllib.request.urlopen(req, timeout=30) as resp:
             content = resp.read().decode("utf-8")
-            if not content.strip():
-                return {"error": "API 回傳空內容", "url": url}
-            return json.loads(content)
-    except urllib.error.HTTPError as e:
-        return {"error": f"HTTP {e.code}: {e.reason}", "url": url}
-    except urllib.error.URLError as e:
-        return {"error": f"URL Error: {e.reason}", "url": url}
-    except json.JSONDecodeError as e:
-        return {"error": f"JSON 解析失敗: {str(e)}", "url": url}
-    except Exception as e:
-        return {"error": str(e), "url": url}
+
+        if not content.strip():
+            return {
+                "error": "API 回傳空內容",
+                "url": url,
+            }
+
+        return json.loads(content)
+
+    except urllib.error.HTTPError as exc:
+        return {
+            "error": f"HTTP {exc.code}: {exc.reason}",
+            "url": url,
+        }
+
+    except urllib.error.URLError as exc:
+        return {
+            "error": f"URL Error: {exc.reason}",
+            "url": url,
+        }
+
+    except json.JSONDecodeError as exc:
+        return {
+            "error": f"JSON 解析失敗: {exc}",
+            "url": url,
+        }
+
+    except Exception as exc:
+        return {
+            "error": str(exc),
+            "url": url,
+        }
 
 
 def fetch_all():
+    """抓取所有端點並整理結果。"""
     result = {}
-    for ep in ENDPOINTS:
-        print(f"  抓取: {ep['id']}")
-        data = fetch_data(ep["id"])
-        result[ep["tab_id"]] = {
-            **ep,
+
+    for endpoint in ENDPOINTS:
+        print(f"  抓取: {endpoint['id']}")
+
+        data = fetch_data(endpoint["id"])
+
+        result[endpoint["tab_id"]] = {
+            **endpoint,
             "data": data,
             "count": len(data) if isinstance(data, list) else 0,
-            "has_error": isinstance(data, dict) and "error" in data,
+            "has_error": (
+                isinstance(data, dict) and "error" in data
+            ),
         }
+
     return result
 
 
-HTML_TEMPLATE = """<!DOCTYPE html>
+# ============================================================
+# HTML、CSS、JavaScript
+# ============================================================
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TWSE 上市個股及大盤統計資訊</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
 :root {
   --bg: #0b1121;
@@ -72,26 +172,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
-  --line: rgba(148,163,184,0.12);
+  --line: rgba(148,163,184,.12);
   --radius: 14px;
-  --shadow: 0 4px 6px -1px rgba(0,0,0,0.4);
-  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.5);
+  --shadow: 0 4px 6px -1px rgba(0,0,0,.4);
+  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,.5);
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 body {
-  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-family: "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.6;
   min-height: 100vh;
 }
 
-/* ===== Header ===== */
 .header {
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+  background: linear-gradient(
+    135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%
+  );
   border-bottom: 1px solid var(--line);
   padding: 1.5rem;
 }
+
 .header-inner {
   max-width: 1200px;
   margin: 0 auto;
@@ -101,43 +210,51 @@ body {
   flex-wrap: wrap;
   gap: 1.5rem;
 }
+
 .header-left .badge {
   display: inline-block;
-  background: rgba(56,189,248,0.15);
+  background: rgba(56,189,248,.15);
   color: var(--accent);
-  font-size: 0.7rem;
-  padding: 0.25rem 0.7rem;
+  font-size: .7rem;
+  padding: .25rem .7rem;
   border-radius: 20px;
-  margin-bottom: 0.5rem;
+  margin-bottom: .5rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: .05em;
 }
+
 .header-left h1 {
   font-size: clamp(1.3rem, 2.5vw, 1.8rem);
   font-weight: 700;
-  background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+  background: linear-gradient(
+    135deg, #38bdf8, #818cf8, #c084fc
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-bottom: 0.3rem;
+  margin-bottom: .3rem;
 }
+
 .header-left p {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: .85rem;
 }
+
 .header-right {
   display: flex;
-  gap: 1.5rem;
+  gap: 1rem;
   flex-wrap: wrap;
 }
+
 .stat-item {
   text-align: center;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.8rem 1.2rem;
+  padding: .8rem 1.2rem;
   min-width: 90px;
 }
+
 .stat-value {
   font-size: 1.5rem;
   font-weight: 700;
@@ -146,43 +263,33 @@ body {
   display: block;
   line-height: 1.2;
 }
+
 .stat-label {
-  font-size: 0.65rem;
+  font-size: .65rem;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-top: 0.2rem;
+  letter-spacing: .08em;
+  margin-top: .2rem;
 }
 
-/* ===== Tab Cards ===== */
 .tab-section {
   max-width: 1200px;
   margin: 2rem auto 1.5rem;
   padding: 0 1.5rem;
 }
+
 .tab-section-title {
-  font-size: 0.75rem;
+  font-size: .75rem;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: .1em;
   margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
-.tab-section-title::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 16px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
-  border-radius: 2px;
-}
+
 .tab-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 1rem;
 }
+
 .tab-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -190,84 +297,91 @@ body {
   padding: 1.2rem 1rem;
   text-align: center;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all .25s;
   position: relative;
   overflow: hidden;
 }
+
 .tab-card::before {
   content: "";
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 3px;
   background: var(--card-color);
   opacity: 0;
-  transition: opacity 0.25s;
 }
-.tab-card:hover::before,
-.tab-card.active::before { opacity: 1; }
-.tab-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
+
+.tab-card:hover,
+.tab-card.active {
   border-color: var(--card-color);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
+
+.tab-card:hover::before,
+.tab-card.active::before {
+  opacity: 1;
+}
+
 .tab-card.active {
   background: var(--surface-2);
-  border-color: var(--card-color);
-  box-shadow: 0 0 20px rgba(0,0,0,0.3), 0 0 0 1px var(--card-color);
 }
+
 .tab-icon {
   font-size: 2.2rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: .6rem;
   display: block;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
+
 .tab-title {
-  font-size: 0.85rem;
+  font-size: .85rem;
   font-weight: 600;
-  color: var(--ink);
-  margin-bottom: 0.3rem;
+  margin-bottom: .3rem;
 }
+
 .tab-desc {
-  font-size: 0.7rem;
+  font-size: .7rem;
   color: var(--muted);
   line-height: 1.4;
 }
+
 .tab-count {
   position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
-  font-size: 0.65rem;
+  top: .6rem;
+  right: .6rem;
+  font-size: .65rem;
   font-family: "JetBrains Mono", monospace;
   background: var(--surface-3);
   color: var(--muted);
-  padding: 0.15rem 0.4rem;
+  padding: .15rem .4rem;
   border-radius: 8px;
 }
-.tab-card.active .tab-count {
-  background: var(--card-color);
-  color: var(--bg);
-}
 
-/* ===== Content Panel ===== */
 .content-panel {
   display: none;
 }
+
 .content-panel.active {
   display: block;
 }
+
 .main {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 1.5rem 3rem;
 }
+
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: .8rem;
   margin-bottom: 1.2rem;
-  padding-bottom: 0.8rem;
+  padding-bottom: .8rem;
   border-bottom: 1px solid var(--line);
 }
+
 .panel-icon {
   font-size: 1.5rem;
   width: 44px;
@@ -279,77 +393,82 @@ body {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+
 .panel-title {
   font-size: 1.1rem;
   font-weight: 600;
 }
+
 .panel-subtitle {
-  font-size: 0.8rem;
+  font-size: .8rem;
   color: var(--muted);
 }
 
-/* ===== Toolbar ===== */
 .toolbar {
   display: flex;
-  gap: 0.8rem;
+  gap: .8rem;
   margin-bottom: 1rem;
   flex-wrap: wrap;
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.8rem 1rem;
+  padding: .8rem 1rem;
 }
+
+.search-box,
+.industry-select {
+  padding: .6rem 1rem;
+  font-size: .9rem;
+  font-family: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  outline: none;
+}
+
 .search-box {
   flex: 1;
   min-width: 200px;
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
-  font-family: inherit;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
-  outline: none;
-  transition: border-color 0.2s;
 }
-.search-box:focus { border-color: var(--accent); }
-.search-box::placeholder { color: var(--muted); }
+
+.search-box:focus,
+.industry-select:focus {
+  border-color: var(--accent);
+}
+
+.search-box::placeholder {
+  color: var(--muted);
+}
+
 .industry-select {
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
-  font-family: inherit;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--ink);
-  outline: none;
-  cursor: pointer;
   min-width: 150px;
+  cursor: pointer;
 }
-.industry-select:focus { border-color: var(--accent); }
+
 .result-count {
-  font-size: 0.8rem;
+  font-size: .8rem;
   color: var(--accent);
-  font-weight: 500;
-  margin-bottom: 0.8rem;
+  margin-bottom: .8rem;
   min-height: 1.2em;
 }
 
-/* ===== Table ===== */
 .data-table-wrap {
   overflow-x: auto;
   border-radius: var(--radius);
   border: 1px solid var(--line);
 }
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: .82rem;
 }
+
 .data-table th {
   background: var(--surface-2);
-  padding: 0.65rem 0.75rem;
+  padding: .65rem .75rem;
   text-align: left;
   font-weight: 500;
   color: var(--accent);
@@ -358,86 +477,165 @@ body {
   top: 0;
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s;
   border-bottom: 2px solid var(--line);
 }
-.data-table th:hover { background: var(--surface-3); }
+
+.data-table th:hover {
+  background: var(--surface-3);
+}
+
 .data-table th .sort-indicator {
   display: inline-block;
-  margin-left: 0.3rem;
+  margin-left: .3rem;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: .65rem;
   width: 1em;
 }
-.data-table th.sort-asc .sort-indicator::after { content: "▲"; color: var(--accent); }
-.data-table th.sort-desc .sort-indicator::after { content: "▼"; color: var(--accent); }
+
+.data-table th.sort-asc .sort-indicator::after {
+  content: "▲";
+  color: var(--accent);
+}
+
+.data-table th.sort-desc .sort-indicator::after {
+  content: "▼";
+  color: var(--accent);
+}
+
 .data-table td {
-  padding: 0.55rem 0.75rem;
+  padding: .55rem .75rem;
   border-bottom: 1px solid var(--line);
-  color: var(--ink);
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.data-table tbody tr { transition: background 0.15s; }
-.data-table tbody tr:hover td { background: rgba(56,189,248,0.06); }
-.data-table tbody tr:last-child td { border-bottom: none; }
-.no-data { text-align: center; padding: 4rem 2rem; color: var(--muted); }
-.no-data-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.6; }
+
+.data-table tbody tr:hover td {
+  background: rgba(56,189,248,.06);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.no-data {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--muted);
+}
+
+.no-data-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
 mark {
-  background: rgba(56,189,248,0.25);
+  background: rgba(56,189,248,.25);
   color: #7dd3fc;
   border-radius: 3px;
   padding: 1px 3px;
 }
+
 .error-box {
-  background: rgba(248,113,113,0.08);
-  border: 1px solid rgba(248,113,113,0.25);
+  background: rgba(248,113,113,.08);
+  border: 1px solid rgba(248,113,113,.25);
   border-radius: var(--radius);
   padding: 2rem;
 }
-.error-url { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; word-break: break-all; }
 
-/* ===== Footer ===== */
+.error-url {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-top: .5rem;
+  word-break: break-all;
+}
+
 .footer {
   text-align: center;
   padding: 2rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: .8rem;
   border-top: 1px solid var(--line);
   margin-top: 2rem;
 }
-.footer a { color: var(--accent); text-decoration: none; }
-.footer a:hover { text-decoration: underline; }
 
-/* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-/* ===== Responsive ===== */
-@media (max-width: 768px) {
-  .header-inner { flex-direction: column; align-items: flex-start; }
-  .header-right { width: 100%; justify-content: space-between; }
-  .tab-grid { grid-template-columns: repeat(2, 1fr); }
-  .main { padding: 0 1rem 3rem; }
-  .tab-section { padding: 0 1rem; }
-  .toolbar { flex-direction: column; align-items: stretch; }
-  .search-box, .industry-select { width: 100%; }
-  .panel-header { flex-wrap: wrap; }
+.footer a {
+  color: var(--accent);
+  text-decoration: none;
 }
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  .header-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tab-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .main {
+    padding: 0 1rem 3rem;
+  }
+
+  .tab-section {
+    padding: 0 1rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box,
+  .industry-select {
+    width: 100%;
+  }
+}
+
 @media (max-width: 400px) {
-  .tab-grid { grid-template-columns: 1fr; }
-  .stat-item { min-width: 70px; padding: 0.6rem 0.8rem; }
-  .stat-value { font-size: 1.2rem; }
+  .tab-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-item {
+    min-width: 70px;
+    padding: .6rem .8rem;
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+  }
 }
 </style>
 </head>
+
 <body>
 
-<!-- Header -->
 <header class="header">
   <div class="header-inner">
     <div class="header-left">
@@ -445,42 +643,52 @@ mark {
       <h1>上市個股及大盤統計資訊</h1>
       <p>臺灣證券交易所免費開放資料 · 每日自動更新</p>
     </div>
+
     <div class="header-right">
       <div class="stat-item">
         <span class="stat-value">{{TOTAL_ENDPOINTS}}</span>
         <div class="stat-label">API 端點</div>
       </div>
+
       <div class="stat-item">
         <span class="stat-value">{{TOTAL_RECORDS}}</span>
         <div class="stat-label">總記錄數</div>
       </div>
+
       <div class="stat-item">
         <span class="stat-value">{{CATEGORY_COUNT}}</span>
         <div class="stat-label">資料類別</div>
       </div>
+
       <div class="stat-item">
-        <span class="stat-value" style="color:{{ERROR_COLOR}};">{{ERROR_COUNT}}</span>
+        <span class="stat-value" style="color:{{ERROR_COLOR}};">
+          {{ERROR_COUNT}}
+        </span>
         <div class="stat-label">異常端點</div>
       </div>
     </div>
   </div>
 </header>
 
-<!-- Tab Cards -->
 <div class="tab-section">
   <div class="tab-section-title">資料類別</div>
   <div class="tab-grid" id="tabGrid"></div>
 </div>
 
-<!-- Content Panels -->
 <main class="main" id="mainContent"></main>
 
-<!-- Footer -->
 <footer class="footer">
-  <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> · 本頁面由 GitHub Actions 自動生成</p>
+  <p>
+    資料來源：
+    <a href="https://openapi.twse.com.tw/" target="_blank"
+       rel="noopener noreferrer">臺灣證券交易所 OpenAPI</a>
+    · 本頁面由 GitHub Actions 自動生成
+  </p>
 </footer>
 
 <script>
+"use strict";
+
 const API_DATA = {{DATA_JSON}};
 const TAB_META = {{TAB_META_JSON}};
 
@@ -492,262 +700,549 @@ let industryFilter = "all";
 const tabGrid = document.getElementById("tabGrid");
 const mainContent = document.getElementById("mainContent");
 
-// ===== Helpers =====
-function escapeHtml(text) {
+
+// ============================================================
+// 通用輔助函式
+// ============================================================
+
+function escapeHtml(value) {
   const div = document.createElement("div");
-  div.textContent = text;
+  div.textContent = value == null ? "" : String(value);
   return div.innerHTML;
 }
 
-function parseNumeric(val) {
-  if (val == null) return null;
-  const s = String(val).replace(/,/g, "").trim();
-  if (s.endsWith("%")) {
-    const n = parseFloat(s.slice(0, -1));
-    return isNaN(n) ? null : n;
-  }
-  const n = parseFloat(s);
-  return isNaN(n) ? null : n;
+
+function parseNumeric(value) {
+  if (value == null) return null;
+
+  const s = String(value).replace(/,/g, "").trim();
+
+  if (!s) return null;
+
+  const normalized = s.endsWith("%")
+    ? s.slice(0, -1)
+    : s;
+
+  const number = Number(normalized);
+
+  return Number.isFinite(number) ? number : null;
 }
 
+
 function highlightText(text, query) {
-  if (!query) return escapeHtml(text);
-  const str = String(text);
+  const str = String(text == null ? "" : text);
+
+  if (!query) {
+    return escapeHtml(str);
+  }
+
   const lowerStr = str.toLowerCase();
   const lowerQuery = query.toLowerCase();
+
   let result = "";
   let lastIndex = 0;
-  let idx = lowerStr.indexOf(lowerQuery);
-  while (idx !== -1) {
-    result += escapeHtml(str.slice(lastIndex, idx));
-    result += "<mark>" + escapeHtml(str.slice(idx, idx + query.length)) + "</mark>";
-    lastIndex = idx + query.length;
-    idx = lowerStr.indexOf(lowerQuery, lastIndex);
+  let index = lowerStr.indexOf(lowerQuery);
+
+  while (index !== -1) {
+    result += escapeHtml(str.slice(lastIndex, index));
+
+    result += "<mark>" +
+      escapeHtml(str.slice(index, index + query.length)) +
+      "</mark>";
+
+    lastIndex = index + query.length;
+
+    index = lowerStr.indexOf(lowerQuery, lastIndex);
   }
+
   result += escapeHtml(str.slice(lastIndex));
+
   return result;
 }
 
-// ===== Render Tab Cards =====
+
+// ============================================================
+// 分類卡片
+// ============================================================
+
 function renderTabCards() {
   tabGrid.innerHTML = "";
+
   TAB_META.forEach(meta => {
     const info = API_DATA[meta.tab_id];
     const count = info ? info.count : 0;
     const isActive = meta.tab_id === currentTab;
+
     const card = document.createElement("div");
-    card.className = "tab-card" + (isActive ? " active" : "");
+
+    card.className =
+      "tab-card" + (isActive ? " active" : "");
+
     card.style.setProperty("--card-color", meta.color);
+
     card.innerHTML =
-      '<span class="tab-count">' + count.toLocaleString() + '</span>' +
-      '<span class="tab-icon">' + meta.icon + '</span>' +
-      '<div class="tab-title">' + escapeHtml(meta.title) + '</div>' +
-      '<div class="tab-desc">' + escapeHtml(meta.desc) + '</div>';
-    card.addEventListener("click", () => switchTab(meta.tab_id));
+      '<span class="tab-count">' +
+      count.toLocaleString() +
+      '</span>' +
+
+      '<span class="tab-icon">' +
+      escapeHtml(meta.icon) +
+      '</span>' +
+
+      '<div class="tab-title">' +
+      escapeHtml(meta.title) +
+      '</div>' +
+
+      '<div class="tab-desc">' +
+      escapeHtml(meta.desc) +
+      '</div>';
+
+    card.addEventListener("click", () => {
+      switchTab(meta.tab_id);
+    });
+
     tabGrid.appendChild(card);
   });
 }
 
-// ===== Switch Tab =====
+
+// ============================================================
+// 切換分類
+// ============================================================
+
 function switchTab(tabId) {
   currentTab = tabId;
   searchText = "";
   industryFilter = "all";
+
   renderTabCards();
   renderContentPanel(tabId);
 }
 
-// ===== Get Industries =====
+
+// ============================================================
+// 取得產業分類
+// ============================================================
+
 function getIndustries(tabId) {
   const info = API_DATA[tabId];
-  if (!info || !Array.isArray(info.data)) return [];
-  const set = new Set();
-  info.data.forEach(row => { if (row["產業別"]) set.add(row["產業別"]); });
-  return Array.from(set).sort();
+
+  if (!info || !Array.isArray(info.data)) {
+    return [];
+  }
+
+  const industries = new Set();
+
+  info.data.forEach(row => {
+    if (row["產業別"]) {
+      industries.add(row["產業別"]);
+    }
+  });
+
+  return Array.from(industries).sort();
 }
 
-// ===== Sort Data =====
+
+// ============================================================
+// 資料排序
+// ============================================================
+
 function sortData(tabId, data) {
   const state = sortState[tabId];
-  if (!state || !state.direction) return data;
-  const col = state.column;
-  const dir = state.direction;
+
+  if (!state || !state.direction) {
+    return data;
+  }
+
+  const column = state.column;
+  const direction = state.direction;
+
   return [...data].sort((a, b) => {
-    const na = parseNumeric(a[col]);
-    const nb = parseNumeric(b[col]);
-    if (na !== null && nb !== null) {
-      return dir === "asc" ? na - nb : nb - na;
+    const numberA = parseNumeric(a[column]);
+    const numberB = parseNumeric(b[column]);
+
+    if (numberA !== null && numberB !== null) {
+      return direction === "asc"
+        ? numberA - numberB
+        : numberB - numberA;
     }
-    const sa = String(a[col] == null ? "" : a[col]).toLowerCase();
-    const sb = String(b[col] == null ? "" : b[col]).toLowerCase();
-    if (sa < sb) return dir === "asc" ? -1 : 1;
-    if (sa > sb) return dir === "asc" ? 1 : -1;
+
+    const valueA = String(
+      a[column] == null ? "" : a[column]
+    ).toLowerCase();
+
+    const valueB = String(
+      b[column] == null ? "" : b[column]
+    ).toLowerCase();
+
+    if (valueA < valueB) {
+      return direction === "asc" ? -1 : 1;
+    }
+
+    if (valueA > valueB) {
+      return direction === "asc" ? 1 : -1;
+    }
+
     return 0;
   });
 }
 
-// ===== Filter Data =====
+
+// ============================================================
+// 搜尋與篩選
+// ============================================================
+
 function filterData(tabId) {
   const info = API_DATA[tabId];
-  if (!info || !Array.isArray(info.data)) return [];
-  let data = info.data;
-  if (tabId === "company" && industryFilter !== "all") {
-    data = data.filter(row => row["產業別"] === industryFilter);
+
+  if (!info || !Array.isArray(info.data)) {
+    return [];
   }
+
+  let data = info.data;
+
+  if (
+    tabId === "company" &&
+    industryFilter !== "all"
+  ) {
+    data = data.filter(
+      row => row["產業別"] === industryFilter
+    );
+  }
+
   if (searchText.trim()) {
-    const q = searchText.toLowerCase().trim();
+    const query = searchText.toLowerCase().trim();
+
     data = data.filter(row => {
-      return Object.values(row).some(val => {
-        if (val == null) return false;
-        return String(val).toLowerCase().includes(q);
+      return Object.values(row).some(value => {
+        if (value == null) return false;
+
+        return String(value)
+          .toLowerCase()
+          .includes(query);
       });
     });
   }
+
   return data;
 }
 
-// ===== Render Table =====
+
+// ============================================================
+// 渲染表格
+// ============================================================
+
 function renderTable(tabId, data) {
-  const container = document.getElementById("table-" + tabId);
-  const countEl = document.getElementById("count-" + tabId);
+  const container = document.getElementById(
+    "table-" + tabId
+  );
+
+  const countEl = document.getElementById(
+    "count-" + tabId
+  );
+
   const info = API_DATA[tabId];
 
   if (!container) return;
 
+  // API 錯誤
   if (info && info.has_error) {
-    let html = '<div class="error-box">' +
-      '<div style="font-size:1.3rem;margin-bottom:0.5rem;">⚠️ 資料抓取失敗</div>' +
-      '<pre style="margin:0;white-space:pre-wrap;word-break:break-all;font-size:0.8rem;color:var(--muted);">' + escapeHtml(JSON.stringify(info.data, null, 2)) + '</pre>';
+    let html =
+      '<div class="error-box">' +
+      '<div style="font-size:1.3rem;margin-bottom:.5rem;">' +
+      '⚠️ 資料抓取失敗' +
+      '</div>' +
+
+      '<pre style="margin:0;white-space:pre-wrap;' +
+      'word-break:break-all;font-size:.8rem;' +
+      'color:var(--muted);">' +
+
+      escapeHtml(
+        JSON.stringify(info.data, null, 2)
+      ) +
+
+      '</pre>';
+
     if (info.data && info.data.url) {
-      html += '<div class="error-url">請求 URL: ' + escapeHtml(info.data.url) + '</div>';
+      html +=
+        '<div class="error-url">請求 URL: ' +
+        escapeHtml(info.data.url) +
+        '</div>';
     }
+
     html += '</div>';
+
     container.innerHTML = html;
-    if (countEl) countEl.textContent = "";
+
+    if (countEl) {
+      countEl.textContent = "";
+    }
+
     return;
   }
 
+  // 沒有資料
   if (!data || data.length === 0) {
-    container.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合條件的資料</p></div>';
-    if (countEl) countEl.textContent = "0 筆資料";
+    container.innerHTML =
+      '<div class="no-data">' +
+      '<div class="no-data-icon">🔍</div>' +
+      '<p>沒有符合條件的資料</p>' +
+      '</div>';
+
+    if (countEl) {
+      countEl.textContent = "0 筆資料";
+    }
+
     return;
   }
 
   const columns = Object.keys(data[0]);
   const state = sortState[tabId];
-  let html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
-  columns.forEach(col => {
+
+  let html =
+    '<div class="data-table-wrap">' +
+    '<table class="data-table">' +
+    '<thead><tr>';
+
+  columns.forEach(column => {
     let sortClass = "";
-    if (state && state.column === col) {
-      sortClass = state.direction === "asc" ? "sort-asc" : "sort-desc";
+
+    if (state && state.column === column) {
+      sortClass =
+        state.direction === "asc"
+          ? "sort-asc"
+          : "sort-desc";
     }
-    html += '<th class="' + sortClass + '">' +
-      '<span onclick="handleSort(\\'' + tabId + '\\', \\' + escapeHtml(col) + '\\')" style="cursor:pointer;">' +
-      escapeHtml(col) + '<span class="sort-indicator"></span></span></th>';
+
+    // 修正：不再於 onclick 中拼接多層跳脫引號。
+    // 排序事件會在表格建立後使用 addEventListener 綁定。
+    html +=
+      '<th class="' + sortClass + '">' +
+      '<span style="cursor:pointer;">' +
+      escapeHtml(column) +
+      '<span class="sort-indicator"></span>' +
+      '</span></th>';
   });
+
   html += '</tr></thead><tbody>';
 
+  // 最多顯示 300 筆，避免大量資料影響效能。
   data.slice(0, 300).forEach(row => {
     html += '<tr>';
-    columns.forEach(col => {
-      const val = row[col];
-      const display = val == null ? "" : String(val);
+
+    columns.forEach(column => {
+      const value = row[column];
+      const display = value == null ? "" : String(value);
       const cell = highlightText(display, searchText);
-      html += '<td title="' + escapeHtml(display) + '">' + cell + '</td>';
+
+      html +=
+        '<td title="' + escapeHtml(display) + '">' +
+        cell +
+        '</td>';
     });
+
     html += '</tr>';
   });
 
   if (data.length > 300) {
-    html += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);padding:1rem;">... 還有 ' + (data.length - 300).toLocaleString() + ' 筆資料，請使用搜尋縮小範圍</td></tr>';
+    html +=
+      '<tr><td colspan="' + columns.length + '"' +
+      ' style="text-align:center;color:var(--muted);' +
+      'padding:1rem;">' +
+      '... 還有 ' +
+      (data.length - 300).toLocaleString() +
+      ' 筆資料，請使用搜尋縮小範圍' +
+      '</td></tr>';
   }
+
   html += '</tbody></table></div>';
+
   container.innerHTML = html;
 
+  // 修正重點：以 DOM 事件處理排序，避免無效跳脫字元。
+  container.querySelectorAll("thead th").forEach(
+    (th, index) => {
+      th.addEventListener("click", () => {
+        window.handleSort(tabId, columns[index]);
+      });
+    }
+  );
+
   if (countEl) {
-    const total = info && Array.isArray(info.data) ? info.data.length : 0;
-    countEl.textContent = '顯示 ' + data.length.toLocaleString() + ' / ' + total.toLocaleString() + ' 筆資料';
+    const total =
+      info && Array.isArray(info.data)
+        ? info.data.length
+        : 0;
+
+    countEl.textContent =
+      "顯示 " +
+      data.length.toLocaleString() +
+      " / " +
+      total.toLocaleString() +
+      " 筆資料";
   }
 }
 
-// ===== Sort Handler =====
+
+// ============================================================
+// 排序事件處理
+// ============================================================
+
 window.handleSort = function(tabId, column) {
-  const state = sortState[tabId] || { column: null, direction: null };
+  const state = sortState[tabId] || {
+    column: null,
+    direction: null,
+  };
+
   let direction = "asc";
+
   if (state.column === column) {
-    if (state.direction === "asc") direction = "desc";
-    else if (state.direction === "desc") direction = null;
-    else direction = "asc";
+    if (state.direction === "asc") {
+      direction = "desc";
+    } else if (state.direction === "desc") {
+      direction = null;
+    } else {
+      direction = "asc";
+    }
   }
+
   if (direction) {
-    sortState[tabId] = { column, direction };
+    sortState[tabId] = {
+      column,
+      direction,
+    };
   } else {
     delete sortState[tabId];
   }
+
   refreshCurrentTab();
 };
 
+
+// ============================================================
+// 更新目前分類
+// ============================================================
+
 function refreshCurrentTab() {
   let data = filterData(currentTab);
+
   data = sortData(currentTab, data);
+
   renderTable(currentTab, data);
 }
 
-// ===== Render Content Panel =====
+
+// ============================================================
+// 渲染內容面板
+// ============================================================
+
 function renderContentPanel(tabId) {
-  const meta = TAB_META.find(c => c.tab_id === tabId);
+  const meta = TAB_META.find(
+    item => item.tab_id === tabId
+  );
+
   if (!meta) return;
 
-  const industries = meta.tab_id === "company" ? getIndustries(tabId) : [];
+  const industries =
+    meta.tab_id === "company"
+      ? getIndustries(tabId)
+      : [];
 
-  let html = '';
-  TAB_META.forEach(m => {
-    const isActive = m.tab_id === tabId;
-    const info = API_DATA[m.tab_id];
-    html += '<div class="content-panel' + (isActive ? ' active' : '') + '" id="panel-' + m.tab_id + '">';
+  let html = "";
 
-    // Panel header
-    html += '<div class="panel-header">' +
-      '<div class="panel-icon" style="border-color:' + m.color + '30;">' + m.icon + '</div>' +
-      '<div><div class="panel-title">' + escapeHtml(m.title) + '</div>' +
-      '<div class="panel-subtitle">' + escapeHtml(m.desc) + '</div></div>' +
-      '</div>';
+  TAB_META.forEach(item => {
+    const isActive = item.tab_id === tabId;
 
-    // Toolbar
-    html += '<div class="toolbar">' +
-      '<input type="text" class="search-box" id="search-' + m.tab_id + '" placeholder="搜尋關鍵字... (如 2330、台積電)" value="">';
+    html +=
+      '<div class="content-panel' +
+      (isActive ? " active" : "") +
+      '" id="panel-' + item.tab_id + '">';
 
-    if (m.tab_id === "company" && industries.length > 0) {
-      html += '<select class="industry-select" id="industry-' + m.tab_id + '">' +
+    // 標題
+    html +=
+      '<div class="panel-header">' +
+
+      '<div class="panel-icon" style="border-color:' +
+      item.color + '30;">' +
+      escapeHtml(item.icon) +
+      '</div>' +
+
+      '<div>' +
+      '<div class="panel-title">' +
+      escapeHtml(item.title) +
+      '</div>' +
+
+      '<div class="panel-subtitle">' +
+      escapeHtml(item.desc) +
+      '</div>' +
+
+      '</div></div>';
+
+    // 搜尋工具列
+    html +=
+      '<div class="toolbar">' +
+
+      '<input type="text" class="search-box" ' +
+      'id="search-' + item.tab_id + '" ' +
+      'placeholder="搜尋關鍵字... (如 2330、台積電)" ' +
+      'value="">';
+
+    // 產業篩選
+    if (
+      item.tab_id === "company" &&
+      industries.length > 0
+    ) {
+      html +=
+        '<select class="industry-select" ' +
+        'id="industry-' + item.tab_id + '">' +
+
         '<option value="all">全部產業別</option>';
-      industries.forEach(ind => {
-        html += '<option value="' + escapeHtml(ind) + '">' + escapeHtml(ind) + '</option>';
+
+      industries.forEach(industry => {
+        html +=
+          '<option value="' + escapeHtml(industry) + '">' +
+          escapeHtml(industry) +
+          '</option>';
       });
+
       html += '</select>';
     }
 
     html += '</div>';
-    html += '<div class="result-count" id="count-' + m.tab_id + '"></div>';
-    html += '<div id="table-' + m.tab_id + '"></div>';
+
+    html +=
+      '<div class="result-count" id="count-' +
+      item.tab_id + '"></div>';
+
+    html +=
+      '<div id="table-' + item.tab_id + '"></div>';
+
     html += '</div>';
   });
 
   mainContent.innerHTML = html;
 
-  // Bind events for active tab only (others are hidden)
-  const activeSearch = document.getElementById("search-" + tabId);
+  // 綁定目前分類的搜尋事件
+  const activeSearch = document.getElementById(
+    "search-" + tabId
+  );
+
   if (activeSearch) {
-    activeSearch.addEventListener("input", (e) => {
-      searchText = e.target.value;
+    activeSearch.addEventListener("input", event => {
+      searchText = event.target.value;
       refreshCurrentTab();
     });
   }
 
+  // 綁定產業篩選事件
   if (tabId === "company") {
-    const industrySelect = document.getElementById("industry-" + tabId);
+    const industrySelect = document.getElementById(
+      "industry-" + tabId
+    );
+
     if (industrySelect) {
-      industrySelect.addEventListener("change", (e) => {
-        industryFilter = e.target.value;
+      industrySelect.addEventListener("change", event => {
+        industryFilter = event.target.value;
         refreshCurrentTab();
       });
     }
@@ -756,48 +1251,158 @@ function renderContentPanel(tabId) {
   refreshCurrentTab();
 }
 
-// ===== Init =====
+
+// ============================================================
+// 初始化
+// ============================================================
+
 renderTabCards();
 renderContentPanel("mi_index");
+
 </script>
 </body>
-</html>"""
+</html>
+"""
 
+
+# ============================================================
+# 產生 HTML
+# ============================================================
 
 def generate_html(all_data):
     total_endpoints = len(all_data)
-    total_records = sum(v["count"] for v in all_data.values())
-    error_count = sum(1 for v in all_data.values() if v["has_error"])
 
-    data_json = json.dumps(all_data, ensure_ascii=False, default=str)
-    tab_meta_json = json.dumps([{k: v for k, v in ep.items() if k in ("tab_id", "title", "icon", "color", "desc")} for ep in ENDPOINTS], ensure_ascii=False)
+    total_records = sum(
+        item["count"] for item in all_data.values()
+    )
+
+    error_count = sum(
+        1
+        for item in all_data.values()
+        if item["has_error"]
+    )
+
+    data_json = json.dumps(
+        all_data,
+        ensure_ascii=False,
+        default=str,
+    )
+
+    tab_meta_json = json.dumps(
+        [
+            {
+                key: value
+                for key, value in endpoint.items()
+                if key in (
+                    "tab_id",
+                    "title",
+                    "icon",
+                    "color",
+                    "desc",
+                )
+            }
+            for endpoint in ENDPOINTS
+        ],
+        ensure_ascii=False,
+    )
 
     html = HTML_TEMPLATE
-    html = html.replace("{{TOTAL_ENDPOINTS}}", str(total_endpoints))
-    html = html.replace("{{TOTAL_RECORDS}}", f"{total_records:,}")
-    html = html.replace("{{CATEGORY_COUNT}}", str(len(set(v["category"] for v in all_data.values()))))
-    html = html.replace("{{ERROR_COUNT}}", str(error_count))
-    html = html.replace("{{ERROR_COLOR}}", 'var(--danger)' if error_count > 0 else 'var(--success)')
-    html = html.replace("{{DATA_JSON}}", data_json)
-    html = html.replace("{{TAB_META_JSON}}", tab_meta_json)
+
+    replacements = {
+        "{{TOTAL_ENDPOINTS}}": str(total_endpoints),
+        "{{TOTAL_RECORDS}}": f"{total_records:,}",
+        "{{CATEGORY_COUNT}}": str(
+            len({
+                item["category"]
+                for item in all_data.values()
+            })
+        ),
+        "{{ERROR_COUNT}}": str(error_count),
+        "{{ERROR_COLOR}}": (
+            "var(--danger)"
+            if error_count > 0
+            else "var(--success)"
+        ),
+        "{{DATA_JSON}}": data_json,
+        "{{TAB_META_JSON}}": tab_meta_json,
+    }
+
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+
     return html
 
 
+# ============================================================
+# 產生 SVG 網站圖示
+# ============================================================
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg"
+viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="#0b1121"/>
+<path d="M10 46h44" stroke="#334155" stroke-width="3"
+stroke-linecap="round"/>
+<path d="M14 39l12-12 9 7 15-19" fill="none"
+stroke="#38bdf8" stroke-width="5"
+stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50" cy="15" r="4" fill="#34d399"/>
+</svg>
+"""
+
+
+# ============================================================
+# 主程式
+# ============================================================
+
 def main():
     public_dir = Path("public")
-    public_dir.mkdir(exist_ok=True)
+    public_dir.mkdir(parents=True, exist_ok=True)
+
     print("開始抓取 TWSE OpenAPI 資料...")
+
     all_data = fetch_all()
+
     print("生成靜態網站...")
+
     html = generate_html(all_data)
+
     index_path = public_dir / "index.html"
     index_path.write_text(html, encoding="utf-8")
+
     data_path = public_dir / "data.json"
-    data_path.write_text(json.dumps(all_data, ensure_ascii=False, indent=2), encoding="utf-8")
-    total_records = sum(v["count"] for v in all_data.values())
-    error_count = sum(1 for v in all_data.values() if v["has_error"])
-    print(f"完成！總記錄數: {total_records:,}，異常端點: {error_count}")
-    print(f"index.html 大小: {len(html) / 1024 / 1024:.1f} MB")
+    data_path.write_text(
+        json.dumps(
+            all_data,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    favicon_path = public_dir / "favicon.svg"
+    favicon_path.write_text(
+        FAVICON_SVG,
+        encoding="utf-8",
+    )
+
+    total_records = sum(
+        item["count"] for item in all_data.values()
+    )
+
+    error_count = sum(
+        1
+        for item in all_data.values()
+        if item["has_error"]
+    )
+
+    print()
+    print("完成！")
+    print(f"總記錄數：{total_records:,}")
+    print(f"異常端點：{error_count}")
+    print(f"HTML 大小：{len(html) / 1024 / 1024:.2f} MB")
+    print(f"HTML 路徑：{index_path}")
+    print(f"JSON 路徑：{data_path}")
+    print(f"圖示路徑：{favicon_path}")
 
 
 if __name__ == "__main__":
