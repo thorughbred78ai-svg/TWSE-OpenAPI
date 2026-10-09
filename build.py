@@ -8,12 +8,12 @@ import urllib.request
 from pathlib import Path
 
 ENDPOINTS = [
-    {"id": "exchangeReport/MI_INDEX", "tab_id": "mi_index", "title": "大盤統計資訊", "icon": "📊", "color": "#38bdf8", "desc": "每日大盤成交統計、漲跌家數"},
-    {"id": "exchangeReport/STOCK_DAY_ALL", "tab_id": "stock_day", "title": "上市個股日成交資訊", "icon": "📈", "color": "#34d399", "desc": "全部上市股票當日開高低收、成交量、成交金額"},
-    {"id": "exchangeReport/BWIBBU_ALL", "tab_id": "bwibbu", "title": "上市個股本益比殖利率", "icon": "💰", "color": "#fbbf24", "desc": "本益比、殖利率、股價淨值比"},
-    {"id": "opendata/t187ap05_L", "tab_id": "revenue", "title": "上市公司每月營業收入", "icon": "📋", "color": "#a78bfa", "desc": "當月營收、上月營收、去年同月、增減百分比"},
-    {"id": "opendata/t187ap45_L", "tab_id": "dividend", "title": "上市公司股利分派情形", "icon": "🎁", "color": "#f472b6", "desc": "現金股利、股票股利、除權息日期"},
-    {"id": "opendata/t187ap03_L", "tab_id": "company", "title": "上市公司基本資料", "icon": "🏢", "color": "#fb923c", "desc": "公司全名、產業別、資本額、成立日期"},
+    {"id": "exchangeReport/MI_INDEX", "tab_id": "mi_index", "title": "大盤統計資訊", "icon": "📊", "color": "#38bdf8", "desc": "每日大盤成交統計、漲跌家數", "category": "大盤"},
+    {"id": "exchangeReport/STOCK_DAY_ALL", "tab_id": "stock_day", "title": "上市個股日成交資訊", "icon": "📈", "color": "#34d399", "desc": "全部上市股票當日開高低收、成交量、成交金額", "category": "成交"},
+    {"id": "exchangeReport/BWIBBU_ALL", "tab_id": "bwibbu", "title": "上市個股本益比殖利率", "icon": "💰", "color": "#fbbf24", "desc": "本益比、殖利率、股價淨值比", "category": "估值"},
+    {"id": "opendata/t187ap05_L", "tab_id": "revenue", "title": "上市公司每月營業收入", "icon": "📋", "color": "#a78bfa", "desc": "當月營收、上月營收、去年同月、增減百分比", "category": "財務"},
+    {"id": "opendata/t187ap45_L", "tab_id": "dividend", "title": "上市公司股利分派情形", "icon": "🎁", "color": "#f472b6", "desc": "現金股利、股票股利、除權息日期", "category": "股利"},
+    {"id": "opendata/t187ap03_L", "tab_id": "company", "title": "上市公司基本資料", "icon": "🏢", "color": "#fb923c", "desc": "公司全名、產業別、資本額、成立日期", "category": "公司資料"},
 ]
 
 BASE_URL = "https://openapi.twse.com.tw/v1"
