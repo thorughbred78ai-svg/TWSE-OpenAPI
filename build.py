@@ -6,6 +6,10 @@ TWSE 上市個股及大盤統計資訊儀表板
 """
 
 import json
+import calendar
+import datetime
+from html.parser import HTMLParser
+import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -147,6 +151,153 @@ def fetch_all():
 
 
 # ============================================================
+# 近 12 個月歷史趨勢資料
+# ============================================================
+
+class _TableParser(HTMLParser):
+    """以標準函式庫擷取 MOPS 月營收歷史頁的表格，不增加第三方依賴。"""
+    def __init__(self):
+        super().__init__()
+        self.tables=[]; self.table=None; self.row=None; self.cell=None
+    def handle_starttag(self, tag, attrs):
+        if tag == "table": self.table=[]
+        elif tag == "tr" and self.table is not None: self.row=[]
+        elif tag in ("td", "th") and self.row is not None: self.cell=[]
+    def handle_data(self, data):
+        if self.cell is not None: self.cell.append(data.strip())
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self.cell is not None and self.row is not None:
+            self.row.append(" ".join(x for x in self.cell if x)); self.cell=None
+        elif tag == "tr" and self.row is not None and self.table is not None:
+            if self.row: self.table.append(self.row)
+            self.row=None
+        elif tag == "table" and self.table is not None:
+            self.tables.append(self.table); self.table=None
+
+
+def _read_url(url, data=None, timeout=12):
+    headers={"User-Agent":"Mozilla/5.0 (compatible; TWSE-Dashboard/1.0)","Accept":"application/json,text/html,*/*"}
+    req=urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw=resp.read()
+    for enc in ("utf-8", "big5", "cp950"):
+        try: return raw.decode(enc)
+        except UnicodeDecodeError: pass
+    return raw.decode("utf-8", errors="replace")
+
+
+def _parse_number(value):
+    try:
+        text=str(value).replace(",", "").replace("%", "").replace("—", "").strip()
+        if text in ("", "-", "--", "N/A"): return None
+        return float(text)
+    except (TypeError, ValueError): return None
+
+
+def fetch_chart_history(all_data, months=12):
+    """擷取近 N 個月 MOPS 月營收及 TWSE 月底附近日成交快照，失敗月份略過。"""
+    companies_data=all_data.get("company", {}).get("data", [])
+    if not isinstance(companies_data, list): companies_data=[]
+    code_industry={}
+    for row in companies_data:
+        code=str(row.get("公司代號", row.get("公司代碼", ""))).strip()
+        industry=str(row.get("產業別", "未分類")).strip() or "未分類"
+        code_industry[code]=industry
+    revenue_by_month=[]; turnover_by_month=[]
+    today=datetime.date.today()
+    month_cursor=today.replace(day=1)
+    month_list=[]
+    for offset in range(months-1, -1, -1):
+        y=month_cursor.year; m=month_cursor.month-offset
+        while m <= 0: y-=1; m+=12
+        while m > 12: y+=1; m-=12
+        month_list.append((y,m))
+
+    for year, month in month_list:
+        label=f"{year}-{month:02d}"
+        roc_year=year-1911
+        # MOPS 官方歷史月營收彙總頁，_0 為國內公司、_1 為外國企業。
+        revenue_totals={}; yoy_values={}
+        for suffix in (0,1):
+            url=f"https://mopsov.twse.com.tw/nas/t21/sii/t21sc03_{roc_year}_{month}_{suffix}.html"
+            try:
+                parser=_TableParser(); parser.feed(_read_url(url))
+                for table in parser.tables:
+                    if not table: continue
+                    header_idx=None; headers=[]
+                    for ri,row in enumerate(table[:5]):
+                        joined="|".join(row)
+                        if ("公司代號" in joined or "公司代碼" in joined) and ("當月營收" in joined or "營業收入" in joined):
+                            header_idx=ri; headers=[h.replace("\n", "").strip() for h in row]; break
+                    if header_idx is None: continue
+                    def col_index(words):
+                        return next((i for i,h in enumerate(headers) if any(w in h for w in words)), None)
+                    code_i=col_index(["公司代號","公司代碼"]); rev_i=col_index(["當月營收","本月營收"]); yoy_i=col_index(["去年同月增減","去年同月增減(%)","年增率"])
+                    if code_i is None or rev_i is None: continue
+                    for row in table[header_idx+1:]:
+                        if len(row)<=max(code_i,rev_i): continue
+                        code=row[code_i].strip()
+                        if not code.isdigit(): continue
+                        industry=code_industry.get(code,"未分類")
+                        rev=_parse_number(row[rev_i])
+                        yoy=_parse_number(row[yoy_i]) if yoy_i is not None and len(row)>yoy_i else None
+                        if rev is not None: revenue_totals[industry]=revenue_totals.get(industry,0)+rev
+                        if yoy is not None: yoy_values.setdefault(industry,[]).append(yoy)
+            except Exception:
+                continue
+        if revenue_totals:
+            all_rev=sum(revenue_totals.values())
+            overall_yoy=None
+            # 以產業營收加權平均各產業已公布年增率；缺資料的月份不造值。
+            weighted=[]; weights=[]
+            for ind, vals in yoy_values.items():
+                weight=revenue_totals.get(ind,0)
+                if vals and weight>0: weighted.append(sum(vals)/len(vals)*weight); weights.append(weight)
+            if weights: overall_yoy=sum(weighted)/sum(weights)
+            revenue_by_month.append({"month":label,"overall":overall_yoy,"industries":{k:(sum(v)/len(v)) for k,v in yoy_values.items() if v}})
+
+        # TWSE 月底附近最近一個有資料的交易日，取全上市股票成交金額後按產業彙總。
+        last_day=calendar.monthrange(year,month)[1]
+        day=datetime.date(year,month,last_day)
+        amount_by_industry={}
+        for _ in range(8):
+            if day.weekday()<5 and day<=today:
+                url=f"https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={day:%Y%m%d}&type=ALLBUT0999&response=json"
+                try:
+                    payload=json.loads(_read_url(url))
+                    found=False
+                    for table in payload.get("tables",[]):
+                        fields=table.get("fields",[]); data=table.get("data",[])
+                        code_i=next((i for i,h in enumerate(fields) if "證券代號" in h or "股票代號" in h),None)
+                        amount_i=next((i for i,h in enumerate(fields) if "成交金額" in h),None)
+                        if code_i is None or amount_i is None: continue
+                        for row in data:
+                            if len(row)<=max(code_i,amount_i): continue
+                            code=str(row[code_i]).strip()
+                            amount=_parse_number(row[amount_i])
+                            if code.isdigit() and amount is not None:
+                                ind=code_industry.get(code,"未分類")
+                                amount_by_industry[ind]=amount_by_industry.get(ind,0)+amount
+                        found=True
+                    if found and amount_by_industry: break
+                except Exception:
+                    pass
+            day-=datetime.timedelta(days=1)
+        if amount_by_industry:
+            total=sum(amount_by_industry.values())
+            turnover_by_month.append({"month":label,"overall":100.0 if total else None,"industries":{k:v/total*100 for k,v in amount_by_industry.items()} if total else {}})
+
+    industries=set()
+    for item in revenue_by_month: industries.update(item["industries"].keys())
+    for item in turnover_by_month: industries.update(item["industries"].keys())
+    def series_for(rows, key):
+        return [{"month":r["month"],"value":r.get(key)} for r in rows if r.get(key) is not None]
+    revenue_ind={ind:[{"month":r["month"],"value":r["industries"].get(ind)} for r in revenue_by_month if r["industries"].get(ind) is not None] for ind in industries}
+    turnover_ind={ind:[{"month":r["month"],"value":r["industries"].get(ind)} for r in turnover_by_month if r["industries"].get(ind) is not None] for ind in industries}
+    return {"revenue_yoy_overall":series_for(revenue_by_month,"overall"),"revenue_yoy_by_industry":revenue_ind,"turnover_share_overall":[],"turnover_share_by_industry":turnover_ind}
+
+
+# ============================================================
 # HTML、CSS、JavaScript
 # ============================================================
 
@@ -161,21 +312,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 <style>
 :root {
-  --bg: #0b1121;
-  --surface: #151e32;
-  --surface-2: #1e293b;
-  --surface-3: #334155;
-  --ink: #f1f5f9;
-  --muted: #94a3b8;
+  --bg: #f3f6fb;
+  --surface: #ffffff;
+  --surface-2: #edf2f8;
+  --surface-3: #dbe4ef;
+  --ink: #172033;
+  --muted: #64748b;
   --accent: #38bdf8;
   --accent-2: #818cf8;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
-  --line: rgba(148,163,184,.12);
+  --line: rgba(100,116,139,.22);
   --radius: 14px;
-  --shadow: 0 4px 6px -1px rgba(0,0,0,.4);
-  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,.5);
+  --shadow: 0 4px 12px rgba(15,23,42,.06);
+  --shadow-lg: 0 12px 28px rgba(15,23,42,.10);
 }
 
 * {
@@ -194,9 +345,7 @@ body {
 }
 
 .header {
-  background: linear-gradient(
-    135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%
-  );
+  background: linear-gradient(135deg, #ffffff 0%, #edf5ff 100%);
   border-bottom: 1px solid var(--line);
   padding: 1.5rem;
 }
@@ -272,32 +421,42 @@ body {
 }
 
 .tab-section {
-  max-width: 1200px;
-  margin: 2rem auto 1.5rem;
-  padding: 0 1.5rem;
+  max-width: 1400px;
+  margin: .35rem auto .6rem;
+  padding: .35rem 1.25rem .25rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
 
 .tab-section-title {
-  font-size: .75rem;
+  font-size: .68rem;
   color: var(--muted);
-  letter-spacing: .1em;
-  margin-bottom: 1rem;
+  letter-spacing: .06em;
+  margin-bottom: .25rem;
 }
 
 .tab-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 1rem;
+  display: flex;
+  gap: .45rem;
+  overflow-x: auto;
+  padding: .15rem .1rem .45rem;
+  scrollbar-width: thin;
 }
 
 .tab-card {
+  flex: 0 0 auto;
+  min-width: 118px;
+  max-width: 180px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.2rem 1rem;
-  text-align: center;
+  border-radius: 10px;
+  padding: .55rem .8rem;
+  text-align: left;
   cursor: pointer;
-  transition: all .25s;
+  transition: background .18s, border-color .18s;
   position: relative;
   overflow: hidden;
 }
@@ -330,24 +489,22 @@ body {
 }
 
 .tab-icon {
-  font-size: 2.2rem;
-  margin-bottom: .6rem;
-  display: block;
+  font-size: 1.05rem;
+  margin-right: .35rem;
+  display: inline;
 }
 
 .tab-title {
-  font-size: .85rem;
+  display: inline;
+  font-size: .78rem;
   font-weight: 600;
-  margin-bottom: .3rem;
+  white-space: nowrap;
 }
 
-.tab-desc {
-  font-size: .7rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
+.tab-desc { display: none; }
 
 .tab-count {
+  display: none;
   position: absolute;
   top: .6rem;
   right: .6rem;
@@ -368,7 +525,7 @@ body {
 }
 
 .main {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 1.5rem 3rem;
 }
@@ -583,6 +740,17 @@ mark {
   border-radius: 4px;
 }
 
+
+.overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1rem 0 1.2rem}
+.overview-columns{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.overview-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:1.2rem;box-shadow:var(--shadow);min-width:0}
+.overview-label{font-size:.82rem;color:var(--muted);margin-bottom:.35rem}.overview-value{font-size:clamp(1.35rem,2.2vw,2rem);font-weight:700;letter-spacing:-.03em;overflow-wrap:anywhere}.overview-note{font-size:.75rem;color:var(--muted);margin-top:.35rem}.overview-card h3{font-size:1rem;margin-bottom:1rem}.breadth-row{display:flex;flex-wrap:wrap;gap:1rem;font-weight:600;font-size:.9rem}.trend-up{color:#15803d}.trend-down{color:#b91c1c}.breadth-bar{height:10px;display:flex;overflow:hidden;border-radius:99px;margin:1rem 0}.industry-bar-row{display:grid;grid-template-columns:minmax(70px,auto) 1fr 36px;gap:.6rem;align-items:center;margin:.7rem 0;font-size:.82rem}.industry-bar{height:9px;border-radius:99px;background:#e2e8f0;overflow:hidden}.industry-bar i{display:block;height:100%;background:#3b82f6;border-radius:99px}.industry-bar-row b{text-align:right;font-variant-numeric:tabular-nums}.overview-foot{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem;background:#eaf2ff;border-radius:12px;font-size:.82rem;color:#334155}.overview-disclaimer{font-size:.75rem;color:var(--muted);margin-top:1rem;line-height:1.7}
+.trend-controls{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin:.65rem 0 1rem}.trend-controls label{font-size:.8rem;color:var(--muted);font-weight:600}.trend-controls select{border:1px solid var(--line);border-radius:8px;padding:.45rem .65rem;background:#fff;color:var(--ink);font:inherit;font-size:.82rem}.trend-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0}.trend-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:1.1rem;min-width:0;box-shadow:var(--shadow)}.trend-card h3{font-size:1rem;margin-bottom:.25rem}.trend-card .trend-desc{font-size:.76rem;color:var(--muted);margin-bottom:.75rem}.trend-chart{width:100%;min-height:210px;overflow:hidden}.trend-chart svg{display:block;width:100%;height:auto}.chart-empty{min-height:170px;display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;color:var(--muted);font-size:.85rem;background:var(--surface-2);border-radius:10px}.chart-legend{display:flex;gap:.7rem;flex-wrap:wrap;font-size:.75rem;color:var(--muted);margin-top:.45rem}.chart-legend span{display:inline-flex;align-items:center;gap:.3rem}.legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%}@media(max-width:760px){.trend-grid{grid-template-columns:1fr}}
+.industry-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:.6rem}.industry-table{border-collapse:collapse;width:100%;font-size:.82rem;white-space:nowrap}.industry-table th,.industry-table td{padding:.7rem .8rem;border-bottom:1px solid var(--line);text-align:right}.industry-table th{background:var(--surface-2);color:var(--accent);position:sticky;top:0}.industry-table th:first-child,.industry-table td:first-child{text-align:left}.industry-table tbody tr:hover{background:rgba(59,130,246,.06)}
+.nav-hint{font-size:.68rem;color:var(--muted);margin-left:.3rem}
+@media(max-width:760px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-columns{grid-template-columns:1fr}}
+@media(max-width:420px){.overview-grid{grid-template-columns:1fr}}
+
 @media (max-width: 768px) {
   .header-inner {
     flex-direction: column;
@@ -594,9 +762,8 @@ mark {
     justify-content: space-between;
   }
 
-  .tab-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .tab-grid { display:flex; }
+  .tab-card { min-width: 112px; }
 
   .main {
     padding: 0 1rem 3rem;
@@ -618,9 +785,8 @@ mark {
 }
 
 @media (max-width: 400px) {
-  .tab-grid {
-    grid-template-columns: 1fr;
-  }
+  .tab-grid { display:flex; }
+  .tab-card { min-width: 108px; }
 
   .stat-item {
     min-width: 70px;
@@ -671,7 +837,7 @@ mark {
 </header>
 
 <div class="tab-section">
-  <div class="tab-section-title">資料類別</div>
+  <div class="tab-section-title">快速導覽 <span class="nav-hint">· 橫向排列、固定於上方，切換頁籤不必回到頁首</span></div>
   <div class="tab-grid" id="tabGrid"></div>
 </div>
 
@@ -691,8 +857,9 @@ mark {
 
 const API_DATA = {{DATA_JSON}};
 const TAB_META = {{TAB_META_JSON}};
+const CHART_HISTORY = {{CHART_HISTORY_JSON}};
 
-let currentTab = "mi_index";
+let currentTab = "overview";
 let searchText = "";
 let sortState = {};
 let industryFilter = "all";
@@ -768,7 +935,8 @@ function highlightText(text, query) {
 function renderTabCards() {
   tabGrid.innerHTML = "";
 
-  TAB_META.forEach(meta => {
+  const dashboardMeta = {tab_id:"overview", title:"整體統計分析看板", icon:"🧭", color:"#2563eb", desc:"市場廣度、成交量、估值與營收快速總覽"};
+  [dashboardMeta, ...TAB_META].forEach(meta => {
     const info = API_DATA[meta.tab_id];
     const count = info ? info.count : 0;
     const isActive = meta.tab_id === currentTab;
@@ -814,9 +982,9 @@ function switchTab(tabId) {
   currentTab = tabId;
   searchText = "";
   industryFilter = "all";
-
   renderTabCards();
-  renderContentPanel(tabId);
+  if (tabId === "overview") renderOverview();
+  else renderContentPanel(tabId);
 }
 
 
@@ -867,10 +1035,14 @@ function getCompanyIndustryMap() {
 }
 
 function getIndustryForRow(row, tabId) {
-  // 若資料本身已帶產業別，優先採用；否則依股票代號對照基本資料。
-  if (row && row["產業別"]) return row["產業別"];
+  // 以公司基本資料的中文產業名稱為準。營收資料的「產業別」欄位可能是數字代碼，
+  // 因此先用股票代號對應基本資料，避免下拉選單出現代碼或篩選失敗。
   const code = getStockCode(row);
-  return code ? getCompanyIndustryMap().get(code) || "" : "";
+  const mapped = code ? getCompanyIndustryMap().get(code) : "";
+  if (mapped) return mapped;
+  const raw = row && row["產業別"] != null ? String(row["產業別"]).trim() : "";
+  const known = new Set(getIndustries("company"));
+  return known.has(raw) ? raw : "";
 }
 
 
@@ -1168,6 +1340,103 @@ function refreshCurrentTab() {
 // 渲染內容面板
 // ============================================================
 
+function renderTrendChart(containerId, series, period, valueSuffix = "%") {
+  const host = document.getElementById(containerId);
+  if (!host) return;
+  const sliced = (series || []).slice(-period);
+  const usable = sliced.filter(p => Number.isFinite(Number(p.value)));
+  if (usable.length < 2) {
+    host.innerHTML = '<div class="chart-empty">目前可用的歷史月份不足，無法繪製趨勢線。<br>請更新／補齊歷史月資料後再查看。</div>';
+    return;
+  }
+  const W=620,H=220,L=48,R=16,T=16,B=34, plotW=W-L-R, plotH=H-T-B;
+  const vals=usable.map(p=>Number(p.value));
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if (min===max) { min-=1; max+=1; }
+  const pad=(max-min)*.12; min-=pad; max+=pad;
+  const x=i=>L+(usable.length===1?plotW/2:i*plotW/(usable.length-1));
+  const y=v=>T+(max-v)/(max-min)*plotH;
+  const points=usable.map((p,i)=>`${x(i)},${y(Number(p.value))}`).join(' ');
+  const grid=[0,.5,1].map(fr=>{const yy=T+fr*plotH, vv=max-fr*(max-min);return `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#e2e8f0"/><text x="${L-8}" y="${yy+4}" text-anchor="end" font-size="10" fill="#64748b">${vv.toLocaleString('zh-TW',{maximumFractionDigits:1})}${valueSuffix}</text>`}).join('');
+  const labelEvery=Math.max(1,Math.ceil(usable.length/6));
+  const labels=usable.map((p,i)=>(i%labelEvery===0||i===usable.length-1)?`<text x="${x(i)}" y="${H-10}" text-anchor="middle" font-size="10" fill="#64748b">${escapeHtml(p.month)}</text>`:'').join('');
+  const dots=usable.map((p,i)=>`<circle cx="${x(i)}" cy="${y(Number(p.value))}" r="3.2" fill="#2563eb"><title>${escapeHtml(p.month)}：${Number(p.value).toLocaleString('zh-TW',{maximumFractionDigits:2})}${valueSuffix}</title></circle>`).join('');
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="期間趨勢圖">${grid}<polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labels}</svg>`;
+}
+function refreshTrendCharts() {
+  const periodEl=document.getElementById('trendPeriod');
+  const period=periodEl?Number(periodEl.value):12;
+  const selected=document.getElementById('trendIndustry');
+  const industry=selected?selected.value:'all';
+  const revenueSeries=industry==='all'?(CHART_HISTORY.revenue_yoy_overall||[]):((CHART_HISTORY.revenue_yoy_by_industry||{})[industry]||[]);
+  renderTrendChart('revenueTrendChart',revenueSeries,period,'%');
+  let turnoverIndustry=industry;
+  if (turnoverIndustry==='all') {
+    const latest=(CHART_HISTORY.turnover_share_by_industry||{});
+    turnoverIndustry=Object.keys(latest).sort((a,b)=>{
+      const av=latest[a].length?Number(latest[a][latest[a].length-1].value):-1;
+      const bv=latest[b].length?Number(latest[b][latest[b].length-1].value):-1;
+      return bv-av;
+    })[0]||'';
+  }
+  const turnoverSeries=turnoverIndustry?((CHART_HISTORY.turnover_share_by_industry||{})[turnoverIndustry]||[]):[];
+  const turnoverTitle=document.querySelector('#turnoverTrendChart')?.closest('.trend-card')?.querySelector('.trend-desc');
+  if (turnoverTitle) turnoverTitle.textContent=industry==='all'?(turnoverIndustry?`目前顯示最新月份成交占比最高的產業：${turnoverIndustry}；可從上方選單切換產業。`:'歷史成交資料尚未取得。'):'目前選取產業：'+industry+'；占比為該月產業成交金額／全市場成交金額。';
+  renderTrendChart('turnoverTrendChart',turnoverSeries,period,'%');
+}
+
+function renderOverview() {
+  const fmt = v => Number.isFinite(v) ? v.toLocaleString("zh-TW", {maximumFractionDigits:2}) : "—";
+  const rows = id => API_DATA[id] && Array.isArray(API_DATA[id].data) ? API_DATA[id].data : [];
+  const stocks = rows("stock_day"), valuation = rows("bwibbu"), revenue = rows("revenue"), companies = rows("company");
+  const firstValue = (r, keys) => { for (const k of keys) if (r[k] != null && String(r[k]).trim() !== "") return r[k]; return null; };
+  const numeric = (r, keys) => parseNumeric(firstValue(r, keys));
+  const sum = (arr, keys) => arr.reduce((n,r)=>n+(numeric(r,keys)||0),0);
+  const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+  const codeOf = r => getStockCode(r);
+  const industryOf = r => getIndustryForRow(r, "company") || (r["產業別"] && !/^\d+$/.test(String(r["產業別"])) ? String(r["產業別"]) : "未分類");
+  const industryMap = new Map();
+  companies.forEach(r => { const i=industryOf(r); if(!industryMap.has(i)) industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0}); industryMap.get(i).companies++; });
+  valuation.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);const pe=numeric(r,["本益比"]), y=numeric(r,["殖利率(%)","殖利率"]);if(pe!==null&&pe>0)x.pe.push(pe);if(y!==null&&y>=0)x.yield.push(y);});
+  revenue.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);const rev=numeric(r,["當月營收","營業收入-當月營收","當月營業收入"]);if(rev!==null)x.revenue+=rev;const yoy=numeric(r,["去年同月增減(%)","營業收入-去年同月增減(%)","去年同月增減百分比","年增率"]);if(yoy!==null)x.revenueYoY.push(yoy);});
+  stocks.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);x.stocks++;x.amount+=numeric(r,["成交金額"])||0;const ch=numeric(r,["漲跌價差","漲跌"]);if(ch!==null){if(ch>0)x.up++;else if(ch<0)x.down++;}});
+  const industryStats=[...industryMap.values()].sort((a,b)=>b.companies-a.companies);
+  const topIndustries=industryStats.slice(0,10);
+  const up = stocks.filter(r => (numeric(r,["漲跌價差","漲跌"])||0)>0).length;
+  const down = stocks.filter(r => (numeric(r,["漲跌價差","漲跌"])||0)<0).length;
+  const flat = Math.max(0, stocks.length-up-down);
+  const volume=sum(stocks,["成交股數","成交量"]), amount=sum(stocks,["成交金額"]);
+  const peValues=valuation.map(r=>numeric(r,["本益比"])).filter(v=>v!==null&&v>0);
+  const yieldValues=valuation.map(r=>numeric(r,["殖利率(%)","殖利率"])).filter(v=>v!==null&&v>=0);
+  const revenueTotal=sum(revenue,["當月營收","營業收入-當月營收","當月營業收入"]);
+  const errorCount=Object.values(API_DATA).filter(x=>x.has_error).length;
+  const highYield=valuation.filter(r=>(numeric(r,["殖利率(%)","殖利率"])||0)>=5).length;
+  const lowPE=valuation.filter(r=>{const v=numeric(r,["本益比"]);return v!==null&&v>0&&v<=15;}).length;
+  const industryRows=topIndustries.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td>${fmt(x.companies)}</td><td>${fmt(x.stocks)}</td><td>${fmt(x.amount)}</td><td>${fmt(avg(x.pe))}</td><td>${avg(x.yield)===null?"—":fmt(avg(x.yield))+"%"}</td><td>${fmt(x.revenue)}</td><td>${avg(x.revenueYoY)===null?"—":fmt(avg(x.revenueYoY))+"%"}</td><td><span class="trend-up">${fmt(x.up)}</span> / <span class="trend-down">${fmt(x.down)}</span></td></tr>`).join("");
+  mainContent.innerHTML = `<section class="content-panel active">
+    <div class="panel-header"><div class="panel-icon">🧭</div><div><div class="panel-title">整體統計分析看板</div><div class="panel-subtitle">市場交易、估值、股利收益與產業財務概況；指標僅以本次取得的 API 資料計算。</div></div></div>
+    <div class="overview-grid">
+      <article class="overview-card"><div class="overview-label">上市公司家數</div><div class="overview-value">${fmt(companies.length)}</div><div class="overview-note">基本資料回傳筆數</div></article>
+      <article class="overview-card"><div class="overview-label">成交金額合計</div><div class="overview-value">${fmt(amount)}</div><div class="overview-note">單位依原始 API 欄位</div></article>
+      <article class="overview-card"><div class="overview-label">成交股數合計</div><div class="overview-value">${fmt(volume)}</div><div class="overview-note">依日成交資料加總</div></article>
+      <article class="overview-card"><div class="overview-label">平均本益比</div><div class="overview-value">${fmt(avg(peValues))}</div><div class="overview-note">有效正值樣本 ${fmt(peValues.length)} 檔</div></article>
+      <article class="overview-card"><div class="overview-label">平均殖利率</div><div class="overview-value">${avg(yieldValues)===null?"—":fmt(avg(yieldValues))+"%"}</div><div class="overview-note">有效樣本 ${fmt(yieldValues.length)} 檔</div></article>
+      <article class="overview-card"><div class="overview-label">高殖利率個股</div><div class="overview-value">${fmt(highYield)}</div><div class="overview-note">殖利率 ≥ 5%（依當前資料）</div></article>
+      <article class="overview-card"><div class="overview-label">低本益比個股</div><div class="overview-value">${fmt(lowPE)}</div><div class="overview-note">本益比 > 0 且 ≤ 15</div></article>
+      <article class="overview-card"><div class="overview-label">營收資料筆數</div><div class="overview-value">${fmt(revenue.length)}</div><div class="overview-note">營收合計 ${fmt(revenueTotal)}（原始單位）</div></article>
+      <article class="overview-card"><div class="overview-label">資料異常端點</div><div class="overview-value">${fmt(errorCount)}</div><div class="overview-note">共 ${fmt(Object.keys(API_DATA).length)} 個資料端點</div></article>
+    </div>
+    <div class="overview-columns"><article class="overview-card"><h3>市場漲跌廣度</h3><div class="breadth-row"><span class="trend-up">上漲 ${fmt(up)}</span><span class="trend-down">下跌 ${fmt(down)}</span><span>其他 ${fmt(flat)}</span></div><div class="breadth-bar"><span style="width:${stocks.length?up/stocks.length*100:0}%;background:#16a34a"></span><span style="width:${stocks.length?down/stocks.length*100:0}%;background:#dc2626"></span><span style="flex:1;background:#cbd5e1"></span></div><p class="overview-note">漲跌以 API 可辨識的「漲跌價差／漲跌」欄位計算；若欄位缺失，請以大盤統計資料核對。</p></article>
+    <article class="overview-card"><h3>上市公司家數最多的產業</h3>${topIndustries.length?topIndustries.slice(0,8).map(x=>`<div class="industry-bar-row"><span>${escapeHtml(x.name)}</span><div class="industry-bar"><i style="width:${x.companies/Math.max(...topIndustries.map(z=>z.companies),1)*100}%"></i></div><b>${fmt(x.companies)}</b></div>`).join(""):'<p>尚無產業資料</p>'}</article></div>
+    <article class="overview-card"><h3>主要產業比較（按上市公司家數排序）</h3><p class="overview-note">成交金額、營收合計沿用 API 原始單位；平均本益比與殖利率只使用有效數值。營收年增率為可辨識年增欄位的簡單平均，若來源欄位不同會顯示 —。</p><div class="industry-table-wrap"><table class="industry-table"><thead><tr><th>產業別</th><th>公司家數</th><th>成交資料檔數</th><th>成交金額合計</th><th>平均本益比</th><th>平均殖利率</th><th>營收合計</th><th>平均營收年增率</th><th>上漲 / 下跌</th></tr></thead><tbody>${industryRows||'<tr><td colspan="9">目前沒有可用產業資料</td></tr>'}</tbody></table></div></article>
+    <section class="trend-grid-wrap"><div class="panel-header" style="margin-top:1.25rem"><div><div class="panel-title">產業趨勢分析</div><div class="panel-subtitle">可切換觀察期間與產業；僅繪製來源確實提供的歷史資料，不以單月快照推估過去月份。</div></div></div>
+    <div class="trend-controls"><label for="trendPeriod">觀察期間</label><select id="trendPeriod" onchange="refreshTrendCharts()"><option value="3">近 3 個月</option><option value="6">近 6 個月</option><option value="12" selected>近 12 個月</option></select><label for="trendIndustry">產業</label><select id="trendIndustry" onchange="refreshTrendCharts()"><option value="all">整體市場</option>${industryStats.map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select></div>
+    <div class="trend-grid"><article class="trend-card"><h3>近 12 個月各產業營收年增率趨勢</h3><p class="trend-desc">月營收年增率；切換產業可查看單一產業的月度變化。</p><div id="revenueTrendChart" class="trend-chart"></div></article><article class="trend-card"><h3>產業成交金額占比變化</h3><p class="trend-desc">各月產業成交金額占上市股票成交金額總和的比例。</p><div id="turnoverTrendChart" class="trend-chart"></div></article></div></section>
+    <div class="overview-foot"><span>日成交資料：${fmt(stocks.length)} 筆</span><span>估值資料：${fmt(valuation.length)} 筆</span><span>股利資料：${fmt(rows("dividend").length)} 筆</span><span>資料端點異常：${fmt(errorCount)}</span></div>
+    <p class="overview-disclaimer">本看板為描述性統計，不構成投資建議。這些數值是本次擷取資料的橫斷面概況，不代表歷史趨勢或即時行情；產業間比較可能受缺漏欄位、資料更新時間及公司家數差異影響。</p>
+  </section>`;
+  refreshTrendCharts();
+}
 function renderContentPanel(tabId) {
   const meta = TAB_META.find(
     item => item.tab_id === tabId
@@ -1289,7 +1558,7 @@ function renderContentPanel(tabId) {
 // ============================================================
 
 renderTabCards();
-renderContentPanel("mi_index");
+renderOverview();
 
 </script>
 </body>
@@ -1301,7 +1570,7 @@ renderContentPanel("mi_index");
 # 產生 HTML
 # ============================================================
 
-def generate_html(all_data):
+def generate_html(all_data, chart_history=None):
     total_endpoints = len(all_data)
 
     total_records = sum(
@@ -1313,6 +1582,11 @@ def generate_html(all_data):
         for item in all_data.values()
         if item["has_error"]
     )
+
+    if chart_history is None:
+        chart_history = {"revenue_yoy_overall": [], "revenue_yoy_by_industry": {}, "turnover_share_overall": [], "turnover_share_by_industry": {}}
+
+    chart_history_json = json.dumps(chart_history, ensure_ascii=False, default=str)
 
     data_json = json.dumps(
         all_data,
@@ -1357,6 +1631,7 @@ def generate_html(all_data):
         ),
         "{{DATA_JSON}}": data_json,
         "{{TAB_META_JSON}}": tab_meta_json,
+        "{{CHART_HISTORY_JSON}}": chart_history_json,
     }
 
     for placeholder, value in replacements.items():
@@ -1396,7 +1671,10 @@ def main():
 
     print("生成靜態網站...")
 
-    html = generate_html(all_data)
+    print("擷取近 12 個月產業趨勢資料...")
+    chart_history = fetch_chart_history(all_data, months=12)
+
+    html = generate_html(all_data, chart_history=chart_history)
 
     index_path = public_dir / "index.html"
     index_path.write_text(html, encoding="utf-8")
