@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 TWSE OpenAPI Dashboard Builder
@@ -27,7 +26,7 @@ TWSE_ENDPOINTS = {
     ],
     "證券交易": [
         {"id": "exchangeReport/STOCK_DAY_ALL", "name": "上市個股日成交資訊（全市場）", "desc": "全部上市股票當日開高低收、成交量、成交金額、成交筆數"},
-        {"id": "exchangeReport/BWIBBU_ALL", "name": "上市個股日本益比殖利率", "desc": "本益比、殖利率、股價淨值比（全市場）"},
+        {"id": "exchangeReport/BWIBBU_ALL", "name": "上市個股日本比殖利率", "desc": "本益比、殖利率、股價淨值比（全市場）"},
         {"id": "exchangeReport/MI_INDEX", "name": "大盤統計資訊", "desc": "每日大盤成交統計、漲跌家數"},
     ],
     "權證": [
@@ -467,13 +466,14 @@ body {
 .search-hint {
   font-size: 0.8rem;
   color: var(--muted);
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.5rem;
 }
 .result-count {
   font-size: 0.8rem;
   color: var(--accent);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
   font-weight: 500;
+  min-height: 1.2em;
 }
 .error-url {
   font-size: 0.75rem;
@@ -552,7 +552,14 @@ body {
         <button class="tab-btn active" data-tab="table">資料表格</button>
         <button class="tab-btn" data-tab="json">JSON 原始資料</button>
       </div>
-      <div class="tab-panel active" id="tab-table"></div>
+      <div class="tab-panel active" id="tab-table">
+        <div id="tableSearchArea" style="display:none;">
+          <input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等關鍵字">
+          <div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>
+          <div class="result-count" id="resultCount"></div>
+        </div>
+        <div id="tableContainer"></div>
+      </div>
       <div class="tab-panel" id="tab-json"></div>
     </div>
   </div>
@@ -565,6 +572,14 @@ body {
 <script>
 const API_DATA = {{DATA_JSON}};
 const ENDPOINTS_META = {{ENDPOINTS_JSON}};
+
+// ===== 狀態 =====
+let currentCategory = 'all';
+let currentSearch = '';
+let currentEndpointData = null;
+let currentFilteredRows = null;
+
+// ===== DOM 元素 =====
 const searchBox = document.getElementById('searchBox');
 const filterBar = document.getElementById('filterBar');
 const mainContent = document.getElementById('mainContent');
@@ -573,12 +588,12 @@ const modalTitle = document.getElementById('modalTitle');
 const modalClose = document.getElementById('modalClose');
 const tabTable = document.getElementById('tab-table');
 const tabJson = document.getElementById('tab-json');
-let currentCategory = 'all';
-let currentSearch = '';
-let currentEndpointData = null;
-let currentFilteredRows = null;
-let currentDataSearch = '';
+const tableSearchArea = document.getElementById('tableSearchArea');
+const dataSearchBox = document.getElementById('dataSearchBox');
+const tableContainer = document.getElementById('tableContainer');
+const resultCount = document.getElementById('resultCount');
 
+// ===== 初始化分類篩選按鈕 =====
 function initFilters() {
   Object.keys(ENDPOINTS_META).forEach(cat => {
     const btn = document.createElement('button');
@@ -589,6 +604,7 @@ function initFilters() {
     filterBar.appendChild(btn);
   });
 }
+
 function setCategory(cat) {
   currentCategory = cat;
   document.querySelectorAll('.filter-btn').forEach(b => {
@@ -596,6 +612,8 @@ function setCategory(cat) {
   });
   render();
 }
+
+// ===== 渲染主畫面端點卡片 =====
 function render() {
   mainContent.innerHTML = '';
   const categories = currentCategory === 'all' ? Object.keys(API_DATA) : [currentCategory];
@@ -627,8 +645,8 @@ function render() {
   }
 }
 
+// ===== 資料表格搜尋 =====
 function filterDataTable(searchText) {
-  currentDataSearch = searchText;
   if (!currentEndpointData || !Array.isArray(currentEndpointData)) return;
   const q = searchText.toLowerCase().trim();
   if (!q) {
@@ -636,116 +654,115 @@ function filterDataTable(searchText) {
   } else {
     currentFilteredRows = currentEndpointData.filter(row => {
       return Object.values(row).some(val => {
-        if (val === null || val === undefined) return false;
+        if (val == null) return false;
         return String(val).toLowerCase().includes(q);
       });
     });
   }
   renderDataTable(currentFilteredRows, q);
-  updateResultCount(currentFilteredRows.length, currentEndpointData.length);
-}
-
-function updateResultCount(filtered, total) {
-  const countEl = document.getElementById('resultCount');
-  if (countEl) {
-    if (currentDataSearch && currentDataSearch.trim()) {
-      countEl.textContent = '顯示 ' + filtered.toLocaleString() + ' / ' + total.toLocaleString() + ' 筆資料';
-    } else {
-      countEl.textContent = '共 ' + total.toLocaleString() + ' 筆資料';
-    }
+  if (resultCount) {
+    resultCount.textContent = q
+      ? '顯示 ' + currentFilteredRows.length.toLocaleString() + ' / ' + currentEndpointData.length.toLocaleString() + ' 筆資料'
+      : '共 ' + currentEndpointData.length.toLocaleString() + ' 筆資料';
   }
 }
 
+// ===== 渲染資料表格 =====
 function renderDataTable(rows, highlightText) {
-  const tableContainer = document.getElementById('tableContainer');
   if (!tableContainer) return;
-
   if (!rows || rows.length === 0) {
     tableContainer.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合搜尋條件的資料</p></div>';
     return;
   }
   const columns = Object.keys(rows[0]);
-  let tableHtml = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
-  columns.forEach(col => { tableHtml += '<th>' + escapeHtml(col) + '</th>'; });
-  tableHtml += '</tr></thead><tbody>';
+  let html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
+  columns.forEach(col => { html += '<th>' + escapeHtml(col) + '</th>'; });
+  html += '</tr></thead><tbody>';
   rows.slice(0, 200).forEach(row => {
-    tableHtml += '<tr>';
+    html += '<tr>';
     columns.forEach(col => {
       const val = row[col];
-      const display = val === null || val === undefined ? '' : String(val);
-      let cellHtml = escapeHtml(display);
+      const display = val == null ? '' : String(val);
+      let cell = escapeHtml(display);
       if (highlightText && highlightText.trim()) {
-        const regex = new RegExp('(' + escapeRegExp(highlightText) + ')', 'gi');
-        cellHtml = cellHtml.replace(regex, '<mark style="background:rgba(56,189,248,0.3);color:var(--accent);border-radius:3px;padding:1px 3px;">$1</mark>');
+        const pattern = escapeRegExp(highlightText);
+        const regex = new RegExp('(' + pattern + ')', 'gi');
+        cell = cell.replace(regex, '<mark style="background:rgba(56,189,248,0.3);color:var(--accent);border-radius:3px;padding:1px 3px;">$1</mark>');
       }
-      tableHtml += '<td title="' + escapeHtml(display) + '">' + cellHtml + '</td>';
+      html += '<td title="' + escapeHtml(display) + '">' + cell + '</td>';
     });
-    tableHtml += '</tr>';
+    html += '</tr>';
   });
   if (rows.length > 200) {
-    tableHtml += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (rows.length - 200) + ' 筆資料，請使用搜尋縮小範圍或切換 JSON 分頁</td></tr>';
+    html += '<tr><td colspan="' + columns.length + '" style="text-align:center;color:var(--muted);">... 還有 ' + (rows.length - 200) + ' 筆資料，請使用搜尋縮小範圍或切換 JSON 分頁</td></tr>';
   }
-  tableHtml += '</tbody></table></div>';
-  tableContainer.innerHTML = tableHtml;
+  html += '</tbody></table></div>';
+  tableContainer.innerHTML = html;
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, function(m) { return '\\\\' + m; });
 }
 
+// ===== 開啟 Modal =====
 function openModal(ep, category) {
   modalTitle.textContent = ep.name + ' (' + ep.id + ')';
-  const jsonStr = JSON.stringify(ep.data, null, 2);
-  tabJson.innerHTML = '<pre class="json-preview">' + escapeHtml(jsonStr) + '</pre>';
+  tabJson.innerHTML = '<pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre>';
+
+  // 重置搜尋狀態
+  currentEndpointData = null;
+  currentFilteredRows = null;
+  if (dataSearchBox) dataSearchBox.value = '';
 
   if (Array.isArray(ep.data) && ep.data.length > 0) {
     currentEndpointData = ep.data;
     currentFilteredRows = ep.data;
-    currentDataSearch = '';
-
-    tabTable.innerHTML =
-      '<input type="text" class="data-search-box" id="dataSearchBox" placeholder="在資料中搜尋... 支援「公司代號」「公司名稱」等關鍵字">' +
-      '<div class="search-hint">💡 提示：輸入股票代號（如 2330）或公司名稱（如 台積電）即可篩選資料</div>' +
-      '<div class="result-count" id="resultCount">共 ' + ep.data.length.toLocaleString() + ' 筆資料</div>' +
-      '<div id="tableContainer"></div>';
-
-    const dataSearchBox = document.getElementById('dataSearchBox');
-    dataSearchBox.addEventListener('input', function(e) {
-      filterDataTable(e.target.value);
-    });
-
+    if (tableSearchArea) tableSearchArea.style.display = 'block';
+    if (resultCount) resultCount.textContent = '共 ' + ep.data.length.toLocaleString() + ' 筆資料';
     renderDataTable(currentFilteredRows, '');
   } else if (ep.has_error) {
+    if (tableSearchArea) tableSearchArea.style.display = 'none';
     let errorHtml = '<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓取失敗</p><pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre>';
     if (ep.data && ep.data.url) {
       errorHtml += '<div class="error-url">請求 URL: ' + escapeHtml(ep.data.url) + '</div>';
     }
     errorHtml += '</div>';
-    tabTable.innerHTML = errorHtml;
+    tableContainer.innerHTML = errorHtml;
   } else {
-    tabTable.innerHTML = '<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>';
+    if (tableSearchArea) tableSearchArea.style.display = 'none';
+    tableContainer.innerHTML = '<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>';
   }
-  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
-  document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === 0));
+
+  // 顯示 modal 並切換到表格頁籤
   modalOverlay.classList.add('active');
   document.body.style.overflow = 'hidden';
+  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+  document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === 0));
 }
+
 function closeModal() {
   modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
   currentEndpointData = null;
   currentFilteredRows = null;
-  currentDataSearch = '';
 }
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
+
+// ===== 事件綁定 =====
 searchBox.addEventListener('input', (e) => { currentSearch = e.target.value; render(); });
 modalClose.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+dataSearchBox.addEventListener('input', (e) => {
+  filterDataTable(e.target.value);
+});
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
@@ -755,6 +772,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('tab-' + tab).classList.add('active');
   });
 });
+
+// ===== 啟動 =====
 initFilters();
 render();
 </script>
