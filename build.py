@@ -6,10 +6,9 @@ TWSE OpenAPI Dashboard Builder
 
 import json
 import urllib.request
-import os
 from pathlib import Path
 
-# TWSE OpenAPI 端點列表（基於官方 swagger 文件整理）
+# TWSE OpenAPI 端點列表
 ENDPOINTS = {
     "公司基本資料": [
         {"id": "t187ap03_L", "name": "上市公司基本資料", "desc": "公司全名、產業別、統一編號、董監事"},
@@ -18,45 +17,57 @@ ENDPOINTS = {
         {"id": "t187ap04_O", "name": "上櫃公司董事監察人資料", "desc": "上櫃公司董監事資料"},
     ],
     "股利與除權息": [
-        {"id": "t187ap05_L", "name": "上市公司股利分派情", "desc": "現金股利、股票股利、除權息日期"},
+        {"id": "t187ap05_L", "name": "上市公司股利分派情形", "desc": "現金股利、股票股利、除權息日期"},
         {"id": "t187ap05_O", "name": "上櫃公司股利分派情形", "desc": "上櫃公司股利資料"},
         {"id": "t187ap06_L", "name": "上市公司除權息資料", "desc": "除權息參考價、權值、息值"},
         {"id": "t187ap06_O", "name": "上櫃公司除權息資料", "desc": "上櫃公司除權息資料"},
     ],
     "每日交易": [
-        {"id": "exchangeReport_MI_INDEX", "name": "每日收盤行情", "desc": "上市個股每日開高低收、成交量、成交金額"},
-        {"id": "exchangeReport_BWIBBU", "name": "個股日本益比、殖利率、股價淨值比", "desc": "本益比、殖利率、股價淨值比"},
-        {"id": "afterTrading_dailyStockQuotes", "name": "上市個股盤後資訊", "desc": "盤後定價交易資訊"},
-        {"id": "afterTrading_bulk", "name": "鉅額交易日成交資", "desc": "鉅額交易成交價、成交量"},
-        {"id": "afterTrading_oddLot", "name": "零股交易行情", "desc": "零股成交價、成交量"},
+        {"id": "t187ap01_L", "name": "上市個股日成交資訊", "desc": "上市個股每日開高低收、成交量、成交金額"},
+        {"id": "t187ap01_O", "name": "上櫃個股日成交資訊", "desc": "上櫃個股每日成交資訊"},
+        {"id": "t187ap02_L", "name": "上市個股日本益比、殖利率、股價淨值比", "desc": "本益比、殖利率、股價淨值比"},
+        {"id": "t187ap02_O", "name": "上櫃個股日本益比、殖利率、股價淨值比", "desc": "上櫃個股本益比等資料"},
+        {"id": "t187ap14_L", "name": "上市個股盤後定價交易", "desc": "盤後定價交易資訊"},
+        {"id": "t187ap14_O", "name": "上櫃個股盤後定價交易", "desc": "上櫃盤後定價交易資訊"},
+        {"id": "t187ap15_L", "name": "上市鉅額交易日成交資訊", "desc": "鉅額交易成交價、成交量"},
+        {"id": "t187ap15_O", "name": "上櫃鉅額交易日成交資訊", "desc": "上櫃鉅額交易資訊"},
+        {"id": "t187ap16_L", "name": "上市零股交易行情", "desc": "零股成交價、成交量"},
+        {"id": "t187ap16_O", "name": "上櫃零股交易行情", "desc": "上櫃零股交易資訊"},
     ],
     "指數": [
-        {"id": "exchangeReport_FMSRFK", "name": "大盤統計資訊", "desc": "每日大盤成交統計"},
-        {"id": "exchangeReport_ALLBUT0999", "name": "大盤指數彙總", "desc": "各類指數收盤資訊"},
+        {"id": "t47csc", "name": "大盤統計資訊", "desc": "每日大盤成交統計"},
+        {"id": "t44sc", "name": "大盤指數收盤行情", "desc": "各類指數收盤資訊"},
     ],
     "融資融券": [
-        {"id": "exchangeReport_MI_MARGN", "name": "融資融券彙總", "desc": "每日融資餘額、融券餘額"},
+        {"id": "t93sc", "name": "上市融資融券彙總", "desc": "每日融資餘額、融券餘額"},
+        {"id": "t94sc", "name": "上櫃融資融券彙總", "desc": "上櫃融資融券資料"},
     ],
     "借券": [
-        {"id": "exchangeReport_TWT93U", "name": "借券賣出餘額", "desc": "每日借券賣出餘額資訊"},
-        {"id": "exchangeReport_TWT38U", "name": "借券成交明細", "desc": "借券成交資訊"},
+        {"id": "t38sc", "name": "上市借券成交明細", "desc": "借券成交資訊"},
+        {"id": "t38asc", "name": "上櫃借券成交明細", "desc": "上櫃借券成交資訊"},
+        {"id": "t93asc", "name": "上市借券賣出餘額", "desc": "每日借券賣出餘額資訊"},
+        {"id": "t93bsc", "name": "上櫃借券賣出餘額", "desc": "上櫃借券賣出餘額資訊"},
     ],
     "ETF": [
-        {"id": "exchangeReport_BFZFZU", "name": "ETF 淨值與折溢價", "desc": "ETF 淨值、市價、折溢價率"},
+        {"id": "t47etf", "name": "上市ETF淨值與折溢價", "desc": "ETF 淨值、市價、折溢價率"},
+        {"id": "t47aetf", "name": "上櫃ETF淨值與折溢價", "desc": "上櫃ETF淨值與折溢價"},
     ],
     "權證": [
         {"id": "t187ap11_L", "name": "上市權證基本資料", "desc": "權證標的、履約價、到期日"},
+        {"id": "t187ap11_O", "name": "上櫃權證基本資料", "desc": "上櫃權證基本資料"},
         {"id": "t187ap12_L", "name": "上市權證交易資料", "desc": "權證每日交易行情"},
+        {"id": "t187ap12_O", "name": "上櫃權證交易資料", "desc": "上櫃權證交易資料"},
     ],
-    "公司治理 ESG": [
-        {"id": "t187ap46_L_1", "name": "ESG 資訊揭露-公司概況", "desc": "員工人數、營運據點等"},
-        {"id": "t187ap46_L_2", "name": "ESG 資訊揭露-環境", "desc": "溫室氣體排放、能源使用等"},
-        {"id": "t187ap46_L_3", "name": "ESG 資訊揭露-社會", "desc": "員工福利、培訓時數等"},
-        {"id": "t187ap46_L_4", "name": "ESG 資訊揭露-治理", "desc": "董事會運作、內控機制等"},
+    "公司治理ESG": [
+        {"id": "t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點等"},
+        {"id": "t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用等"},
+        {"id": "t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數等"},
+        {"id": "t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "董事會運作、內控機制等"},
     ],
 }
 
 BASE_URL = "https://openapi.twse.com.tw/v1/opendata"
+
 
 def fetch_data(endpoint_id):
     """抓取單一端點資料"""
@@ -71,12 +82,14 @@ def fetch_data(endpoint_id):
     except Exception as e:
         return {"error": str(e), "endpoint": endpoint_id}
 
+
 def fetch_all_data():
     """抓取所有端點資料"""
     all_data = {}
     for category, endpoints in ENDPOINTS.items():
         all_data[category] = []
         for ep in endpoints:
+            print(f"  抓取: {ep['id']} - {ep['name']}")
             data = fetch_data(ep["id"])
             all_data[category].append({
                 **ep,
@@ -86,21 +99,15 @@ def fetch_all_data():
             })
     return all_data
 
+
 def generate_html(all_data):
     """生成靜態 HTML 網站"""
-
-    # 計算統計數據
     total_endpoints = sum(len(eps) for eps in ENDPOINTS.values())
-    total_records = sum(
-        ep["count"] for cat in all_data.values() for ep in cat
-    )
-    error_count = sum(
-        1 for cat in all_data.values() for ep in cat if ep["has_error"]
-    )
+    total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
+    error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
 
-    # 將資料序列化為 JSON 嵌入 HTML
     data_json = json.dumps(all_data, ensure_ascii=False, default=str)
-    endpoints_json = json.dumps(ENDPOINTS, ensure_ascii=False)
+    endpoints_json = json.dumps({k: [e["id"] for e in v] for k, v in ENDPOINTS.items()}, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-TW">
@@ -127,9 +134,7 @@ def generate_html(all_data):
   --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
   --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.4), 0 8px 10px -6px rgba(0,0,0,0.4);
 }}
-
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-
 body {{
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background: var(--bg);
@@ -137,8 +142,6 @@ body {{
   line-height: 1.6;
   min-height: 100vh;
 }}
-
-/* Header */
 .header {{
   background: linear-gradient(135deg, var(--surface) 0%, #0f172a 100%);
   border-bottom: 1px solid var(--line);
@@ -148,12 +151,7 @@ body {{
   z-index: 100;
   backdrop-filter: blur(10px);
 }}
-
-.header-inner {{
-  max-width: 1200px;
-  margin: 0 auto;
-}}
-
+.header-inner {{ max-width: 1200px; margin: 0 auto; }}
 .header h1 {{
   font-size: clamp(1.5rem, 3vw, 2.2rem);
   font-weight: 700;
@@ -163,13 +161,7 @@ body {{
   background-clip: text;
   margin-bottom: 0.5rem;
 }}
-
-.header p {{
-  color: var(--muted);
-  font-size: 0.95rem;
-}}
-
-/* Stats bar */
+.header p {{ color: var(--muted); font-size: 0.95rem; }}
 .stats-bar {{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -178,7 +170,6 @@ body {{
   margin: 1.5rem auto;
   padding: 0 1.5rem;
 }}
-
 .stat-card {{
   background: var(--surface);
   border: 1px solid var(--line);
@@ -187,19 +178,13 @@ body {{
   text-align: center;
   transition: transform 0.2s, box-shadow 0.2s;
 }}
-
-.stat-card:hover {{
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}}
-
+.stat-card:hover {{ transform: translateY(-2px); box-shadow: var(--shadow-lg); }}
 .stat-value {{
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--accent);
   font-family: "JetBrains Mono", monospace;
 }}
-
 .stat-label {{
   font-size: 0.8rem;
   color: var(--muted);
@@ -207,14 +192,7 @@ body {{
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }}
-
-/* Search */
-.search-section {{
-  max-width: 1200px;
-  margin: 0 auto 1.5rem;
-  padding: 0 1.5rem;
-}}
-
+.search-section {{ max-width: 1200px; margin: 0 auto 1.5rem; padding: 0 1.5rem; }}
 .search-box {{
   width: 100%;
   padding: 1rem 1.2rem;
@@ -227,17 +205,8 @@ body {{
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }}
-
-.search-box:focus {{
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(56,189,248,0.15);
-}}
-
-.search-box::placeholder {{
-  color: var(--muted);
-}}
-
-/* Category filter */
+.search-box:focus {{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.15); }}
+.search-box::placeholder {{ color: var(--muted); }}
 .filter-bar {{
   max-width: 1200px;
   margin: 0 auto 1rem;
@@ -246,7 +215,6 @@ body {{
   flex-wrap: wrap;
   gap: 0.5rem;
 }}
-
 .filter-btn {{
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
@@ -258,25 +226,13 @@ body {{
   cursor: pointer;
   transition: all 0.2s;
 }}
-
-.filter-btn:hover,
-.filter-btn.active {{
+.filter-btn:hover, .filter-btn.active {{
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);
 }}
-
-/* Main content */
-.main {{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1.5rem 3rem;
-}}
-
-.category-section {{
-  margin-bottom: 2rem;
-}}
-
+.main {{ max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 3rem; }}
+.category-section {{ margin-bottom: 2rem; }}
 .category-title {{
   font-size: 1.1rem;
   font-weight: 600;
@@ -288,7 +244,6 @@ body {{
   align-items: center;
   gap: 0.5rem;
 }}
-
 .category-title .count {{
   font-size: 0.75rem;
   background: var(--surface-2);
@@ -297,14 +252,11 @@ body {{
   color: var(--muted);
   font-weight: 400;
 }}
-
-/* Endpoint cards grid */
 .endpoint-grid {{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1rem;
 }}
-
 .endpoint-card {{
   background: var(--surface);
   border: 1px solid var(--line);
@@ -315,44 +267,29 @@ body {{
   position: relative;
   overflow: hidden;
 }}
-
 .endpoint-card::before {{
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 3px;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   opacity: 0;
   transition: opacity 0.2s;
 }}
-
-.endpoint-card:hover::before {{
-  opacity: 1;
-}}
-
+.endpoint-card:hover::before {{ opacity: 1; }}
 .endpoint-card:hover {{
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--surface-2);
 }}
-
 .endpoint-card.hidden {{ display: none; }}
-
 .endpoint-header {{
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 0.5rem;
 }}
-
-.endpoint-name {{
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--ink);
-}}
-
+.endpoint-name {{ font-weight: 600; font-size: 1rem; color: var(--ink); }}
 .endpoint-badge {{
   font-size: 0.7rem;
   padding: 0.15rem 0.5rem;
@@ -360,16 +297,9 @@ body {{
   font-weight: 500;
   font-family: "JetBrains Mono", monospace;
 }}
-
 .badge-success {{ background: rgba(52,211,153,0.15); color: var(--success); }}
 .badge-error {{ background: rgba(248,113,113,0.15); color: var(--danger); }}
-
-.endpoint-desc {{
-  color: var(--muted);
-  font-size: 0.9rem;
-  margin-bottom: 0.8rem;
-}}
-
+.endpoint-desc {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 0.8rem; }}
 .endpoint-meta {{
   display: flex;
   justify-content: space-between;
@@ -377,7 +307,6 @@ body {{
   font-size: 0.8rem;
   color: var(--muted);
 }}
-
 .endpoint-id {{
   font-family: "JetBrains Mono", monospace;
   background: var(--surface-2);
@@ -385,12 +314,7 @@ body {{
   border-radius: 6px;
   font-size: 0.75rem;
 }}
-
-.record-count {{
-  font-family: "JetBrains Mono", monospace;
-}}
-
-/* Modal */
+.record-count {{ font-family: "JetBrains Mono", monospace; }}
 .modal-overlay {{
   display: none;
   position: fixed;
@@ -401,9 +325,7 @@ body {{
   justify-content: center;
   padding: 1rem;
 }}
-
 .modal-overlay.active {{ display: flex; }}
-
 .modal {{
   background: var(--surface);
   border: 1px solid var(--line);
@@ -415,7 +337,6 @@ body {{
   flex-direction: column;
   box-shadow: var(--shadow-lg);
 }}
-
 .modal-header {{
   padding: 1.2rem;
   border-bottom: 1px solid var(--line);
@@ -423,12 +344,7 @@ body {{
   justify-content: space-between;
   align-items: center;
 }}
-
-.modal-title {{
-  font-size: 1.1rem;
-  font-weight: 600;
-}}
-
+.modal-title {{ font-size: 1.1rem; font-weight: 600; }}
 .modal-close {{
   background: none;
   border: none;
@@ -440,31 +356,18 @@ body {{
   border-radius: 6px;
   transition: all 0.2s;
 }}
-
-.modal-close:hover {{
-  background: var(--surface-2);
-  color: var(--ink);
-}}
-
-.modal-body {{
-  padding: 1.2rem;
-  overflow-y: auto;
-  flex: 1;
-}}
-
-/* Data table */
+.modal-close:hover {{ background: var(--surface-2); color: var(--ink); }}
+.modal-body {{ padding: 1.2rem; overflow-y: auto; flex: 1; }}
 .data-table-wrap {{
   overflow-x: auto;
   border-radius: 8px;
   border: 1px solid var(--line);
 }}
-
 .data-table {{
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }}
-
 .data-table th {{
   background: var(--surface-2);
   padding: 0.7rem 0.8rem;
@@ -475,7 +378,6 @@ body {{
   position: sticky;
   top: 0;
 }}
-
 .data-table td {{
   padding: 0.6rem 0.8rem;
   border-bottom: 1px solid var(--line);
@@ -485,27 +387,10 @@ body {{
   text-overflow: ellipsis;
   white-space: nowrap;
 }}
-
-.data-table tr:hover td {{
-  background: rgba(56,189,248,0.05);
-}}
-
-.data-table tr:last-child td {{
-  border-bottom: none;
-}}
-
-.no-data {{
-  text-align: center;
-  padding: 3rem;
-  color: var(--muted);
-}}
-
-.no-data-icon {{
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}}
-
-/* JSON preview */
+.data-table tr:hover td {{ background: rgba(56,189,248,0.05); }}
+.data-table tr:last-child td {{ border-bottom: none; }}
+.no-data {{ text-align: center; padding: 3rem; color: var(--muted); }}
+.no-data-icon {{ font-size: 3rem; margin-bottom: 1rem; }}
 .json-preview {{
   background: var(--bg);
   border: 1px solid var(--line);
@@ -520,8 +405,6 @@ body {{
   max-height: 400px;
   overflow-y: auto;
 }}
-
-/* Tabs */
 .tabs {{
   display: flex;
   gap: 0.3rem;
@@ -529,7 +412,6 @@ body {{
   border-bottom: 1px solid var(--line);
   padding-bottom: 0.5rem;
 }}
-
 .tab-btn {{
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
@@ -541,17 +423,10 @@ body {{
   cursor: pointer;
   transition: all 0.2s;
 }}
-
 .tab-btn:hover {{ color: var(--ink); }}
-.tab-btn.active {{
-  background: var(--surface-2);
-  color: var(--accent);
-}}
-
+.tab-btn.active {{ background: var(--surface-2); color: var(--accent); }}
 .tab-panel {{ display: none; }}
 .tab-panel.active {{ display: block; }}
-
-/* Footer */
 .footer {{
   text-align: center;
   padding: 2rem;
@@ -560,29 +435,18 @@ body {{
   border-top: 1px solid var(--line);
   margin-top: 2rem;
 }}
-
-.footer a {{
-  color: var(--accent);
-  text-decoration: none;
-}}
-
+.footer a {{ color: var(--accent); text-decoration: none; }}
 .footer a:hover {{ text-decoration: underline; }}
-
-/* Scrollbar */
 ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
 ::-webkit-scrollbar-track {{ background: var(--bg); }}
 ::-webkit-scrollbar-thumb {{ background: var(--surface-2); border-radius: 4px; }}
 ::-webkit-scrollbar-thumb:hover {{ background: var(--muted); }}
-
-/* Responsive */
 @media (max-width: 640px) {{
   .endpoint-grid {{ grid-template-columns: 1fr; }}
   .stats-bar {{ grid-template-columns: repeat(2, 1fr); }}
   .header {{ padding: 1.2rem 1rem; }}
   .main, .search-section, .filter-bar {{ padding-left: 1rem; padding-right: 1rem; }}
 }}
-
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {{
   *, *::before, *::after {{
     animation-duration: 0.01ms !important;
@@ -592,14 +456,12 @@ body {{
 </style>
 </head>
 <body>
-
 <header class="header">
   <div class="header-inner">
-    <h1>📈 TWSE OpenAPI 資料儀表板</h1>
+    <h1>TWSE OpenAPI 資料儀表板</h1>
     <p>台灣證券交易所免費開放資料 API 瀏覽與查詢工具 · 每日自動更新</p>
   </div>
 </header>
-
 <div class="stats-bar">
   <div class="stat-card">
     <div class="stat-value">{total_endpoints}</div>
@@ -618,19 +480,13 @@ body {{
     <div class="stat-label">異常端點</div>
   </div>
 </div>
-
 <div class="search-section">
-  <input type="text" class="search-box" id="searchBox" 
-         placeholder="🔍 搜尋端點名稱、代號或描述... (例如: 股利、2330、ETF)">
+  <input type="text" class="search-box" id="searchBox" placeholder="搜尋端點名稱、代號或描述... (例如: 股利、2330、ETF)">
 </div>
-
 <div class="filter-bar" id="filterBar">
   <button class="filter-btn active" data-category="all">全部</button>
 </div>
-
 <main class="main" id="mainContent"></main>
-
-<!-- Modal -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <div class="modal-header">
@@ -647,19 +503,13 @@ body {{
     </div>
   </div>
 </div>
-
 <footer class="footer">
-  <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> · 
-     本頁面由 GitHub Actions 自動生成 · 
-     <a href="https://github.com/" target="_blank">原始碼</a></p>
+  <p>資料來源: <a href="https://openapi.twse.com.tw/" target="_blank">臺灣證券交易所 OpenAPI</a> ·
+     本頁面由 GitHub Actions 自動生成</p>
 </footer>
-
 <script>
-// 嵌入資料
 const API_DATA = {data_json};
 const ENDPOINTS_META = {endpoints_json};
-
-// DOM 元素
 const searchBox = document.getElementById('searchBox');
 const filterBar = document.getElementById('filterBar');
 const mainContent = document.getElementById('mainContent');
@@ -668,11 +518,8 @@ const modalTitle = document.getElementById('modalTitle');
 const modalClose = document.getElementById('modalClose');
 const tabTable = document.getElementById('tab-table');
 const tabJson = document.getElementById('tab-json');
-
 let currentCategory = 'all';
 let currentSearch = '';
-
-// 初始化分類按鈕
 function initFilters() {{
   Object.keys(ENDPOINTS_META).forEach(cat => {{
     const btn = document.createElement('button');
@@ -683,8 +530,6 @@ function initFilters() {{
     filterBar.appendChild(btn);
   }});
 }}
-
-// 設定分類
 function setCategory(cat) {{
   currentCategory = cat;
   document.querySelectorAll('.filter-btn').forEach(b => {{
@@ -692,95 +537,45 @@ function setCategory(cat) {{
   }});
   render();
 }}
-
-// 渲染主內容
 function render() {{
   mainContent.innerHTML = '';
-
-  const categories = currentCategory === 'all' 
-    ? Object.keys(API_DATA) 
-    : [currentCategory];
-
+  const categories = currentCategory === 'all' ? Object.keys(API_DATA) : [currentCategory];
   let hasResults = false;
-
   categories.forEach(category => {{
     const endpoints = API_DATA[category].filter(ep => {{
       const q = currentSearch.toLowerCase();
-      return !q || 
-        ep.name.toLowerCase().includes(q) ||
-        ep.id.toLowerCase().includes(q) ||
-        ep.desc.toLowerCase().includes(q);
+      return !q || ep.name.toLowerCase().includes(q) || ep.id.toLowerCase().includes(q) || ep.desc.toLowerCase().includes(q);
     }});
-
     if (endpoints.length === 0) return;
     hasResults = true;
-
     const section = document.createElement('div');
     section.className = 'category-section';
-    section.innerHTML = `
-      <h2 class="category-title">
-        ${{category}}
-        <span class="count">${{endpoints.length}} 個端點</span>
-      </h2>
-      <div class="endpoint-grid"></div>
-    `;
-
+    section.innerHTML = `<h2 class="category-title">${{category}<span class="count">${{endpoints.length}} 個端點</span></h2><div class="endpoint-grid"></div>`;
     const grid = section.querySelector('.endpoint-grid');
     endpoints.forEach(ep => {{
       const card = document.createElement('div');
       card.className = 'endpoint-card';
-      card.dataset.category = category;
-      card.dataset.endpoint = ep.id;
-
       const badgeClass = ep.has_error ? 'badge-error' : 'badge-success';
       const badgeText = ep.has_error ? '異常' : '正常';
-
-      card.innerHTML = `
-        <div class="endpoint-header">
-          <div class="endpoint-name">${{ep.name}}</div>
-          <span class="endpoint-badge ${{badgeClass}}">${{badgeText}}</span>
-        </div>
-        <div class="endpoint-desc">${{ep.desc}}</div>
-        <div class="endpoint-meta">
-          <span class="endpoint-id">${{ep.id}}</span>
-          <span class="record-count">${{ep.count.toLocaleString()}} 筆</span>
-        </div>
-      `;
-
+      card.innerHTML = `<div class="endpoint-header"><div class="endpoint-name">${{ep.name}}</div><span class="endpoint-badge ${{badgeClass}}">${{badgeText}}</span></div><div class="endpoint-desc">${{ep.desc}}</div><div class="endpoint-meta"><span class="endpoint-id">${{ep.id}}</span><span class="record-count">${{ep.count.toLocaleString()}} 筆</span></div>`;
       card.addEventListener('click', () => openModal(ep, category));
       grid.appendChild(card);
     }});
-
     mainContent.appendChild(section);
   }});
-
   if (!hasResults) {{
-    mainContent.innerHTML = `
-      <div class="no-data">
-        <div class="no-data-icon">🔍</div>
-        <p>沒有符合「<strong>${{currentSearch}}</strong>」的結果</p>
-      </div>
-    `;
+    mainContent.innerHTML = `<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合「<strong>${{currentSearch}}</strong>」的結果</p></div>`;
   }}
 }}
-
-// 開 Modal
 function openModal(ep, category) {{
   modalTitle.textContent = `${{ep.name}} (${{ep.id}})`;
-
-  // JSON 分頁
   const jsonStr = JSON.stringify(ep.data, null, 2);
   tabJson.innerHTML = `<pre class="json-preview">${{escapeHtml(jsonStr)}}</pre>`;
-
-  // 表格分頁
   if (Array.isArray(ep.data) && ep.data.length > 0) {{
     const columns = Object.keys(ep.data[0]);
     let tableHtml = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
-    columns.forEach(col => {{
-      tableHtml += `<th>${{escapeHtml(col)}}</th>`;
-    }});
+    columns.forEach(col => {{ tableHtml += `<th>${{escapeHtml(col)}}</th>`; }});
     tableHtml += '</tr></thead><tbody>';
-
     ep.data.slice(0, 200).forEach(row => {{
       tableHtml += '<tr>';
       columns.forEach(col => {{
@@ -790,68 +585,34 @@ function openModal(ep, category) {{
       }});
       tableHtml += '</tr>';
     }});
-
     if (ep.data.length > 200) {{
-      tableHtml += `<tr><td colspan="${{columns.length}}" style="text-align:center;color:var(--muted);">
-        ... 還有 ${{ep.data.length - 200}} 筆資料，請切換 JSON 分頁查看完整內容
-      </td></tr>`;
+      tableHtml += `<tr><td colspan="${{columns.length}}" style="text-align:center;color:var(--muted);">... 還有 ${{ep.data.length - 200}} 筆資料，請切換 JSON 分頁查看完整內容</td></tr>`;
     }}
-
     tableHtml += '</tbody></table></div>';
     tabTable.innerHTML = tableHtml;
   }} else if (ep.has_error) {{
-    tabTable.innerHTML = `
-      <div class="no-data">
-        <div class="no-data-icon">⚠️</div>
-        <p>資料抓取失敗</p>
-        <pre class="json-preview">${{escapeHtml(JSON.stringify(ep.data, null, 2))}}</pre>
-      </div>
-    `;
+    tabTable.innerHTML = `<div class="no-data"><div class="no-data-icon">⚠️</div><p>資料抓失敗</p><pre class="json-preview">${{escapeHtml(JSON.stringify(ep.data, null, 2))}}</pre></div>`;
   }} else {{
-    tabTable.innerHTML = `
-      <div class="no-data">
-        <div class="no-data-icon">📭</div>
-        <p>此端點暫無資料</p>
-      </div>
-    `;
+    tabTable.innerHTML = `<div class="no-data"><div class="no-data-icon">📭</div><p>此端點暫無資料</p></div>`;
   }}
-
-  // 重置分頁
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
   document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === 0));
-
   modalOverlay.classList.add('active');
   document.body.style.overflow = 'hidden';
 }}
-
-// 關閉 Modal
 function closeModal() {{
   modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
 }}
-
-// HTML escape
 function escapeHtml(text) {{
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }}
-
-// 事件綁定
-searchBox.addEventListener('input', (e) => {{
-  currentSearch = e.target.value;
-  render();
-}});
-
+searchBox.addEventListener('input', (e) => {{ currentSearch = e.target.value; render(); }});
 modalClose.addEventListener('click', closeModal);
-modalOverlay.addEventListener('click', (e) => {{
-  if (e.target === modalOverlay) closeModal();
-}});
-document.addEventListener('keydown', (e) => {{
-  if (e.key === 'Escape') closeModal();
-}});
-
-// 分頁切換
+modalOverlay.addEventListener('click', (e) => {{ if (e.target === modalOverlay) closeModal(); }});
+document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape') closeModal(); }});
 document.querySelectorAll('.tab-btn').forEach(btn => {{
   btn.addEventListener('click', () => {{
     const tab = btn.dataset.tab;
@@ -861,43 +622,29 @@ document.querySelectorAll('.tab-btn').forEach(btn => {{
     document.getElementById(`tab-${{tab}}`).classList.add('active');
   }});
 }});
-
-// 初始化
 initFilters();
 render();
 </script>
-
 </body>
-</html>
-"""
+</html>"""
     return html
+
 
 def main():
     public_dir = Path("public")
     public_dir.mkdir(exist_ok=True)
-
-    print("🚀 開始抓取 TWSE OpenAPI 資料...")
+    print("開始抓取 TWSE OpenAPI 資料...")
     all_data = fetch_all_data()
-
-    print("📝 生成靜態網站...")
+    print("生成靜態網站...")
     html = generate_html(all_data)
-
     index_path = public_dir / "index.html"
     index_path.write_text(html, encoding="utf-8")
-
-    # 同時輸出原始資料為 JSON 供其他用途
     data_path = public_dir / "data.json"
     data_path.write_text(json.dumps(all_data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    print(f"✅ 完成！")
-    print(f"   網站: {index_path}")
-    print(f"   資料: {data_path}")
-
-    # 輸出摘要
     total_records = sum(ep["count"] for cat in all_data.values() for ep in cat)
     error_count = sum(1 for cat in all_data.values() for ep in cat if ep["has_error"])
-    print(f"   總記錄數: {total_records:,}")
-    print(f"   異常端點: {error_count}")
+    print(f"完成！總記錄數: {total_records:,}，異常端點: {error_count}")
+
 
 if __name__ == "__main__":
     main()
