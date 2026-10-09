@@ -18,7 +18,7 @@ TWSE_ENDPOINTS = {
         {"id": "opendata/t187ap46_L_1", "name": "ESG資訊揭露-公司概況", "desc": "員工人數、營運據點、產品與服務等"},
         {"id": "opendata/t187ap46_L_2", "name": "ESG資訊揭露-環境", "desc": "溫室氣體排放、能源使用、水資源管理等"},
         {"id": "opendata/t187ap46_L_3", "name": "ESG資訊揭露-社會", "desc": "員工福利、培訓時數、職業安全衛生等"},
-        {"id": "opendata/t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "董事會運作、內控機制、資訊透明等"},
+        {"id": "opendata/t187ap46_L_4", "name": "ESG資訊揭露-治理", "desc": "事會運作、內控機制、資訊透明等"},
         {"id": "opendata/t187ap46_L_18", "name": "ESG資訊揭露-持股及控制力", "desc": "持股結構、控制力相關資訊"},
         {"id": "opendata/t187ap46_L_19", "name": "ESG資訊揭露-風險管理政策", "desc": "風險管理政策與關鍵材料風險"},
         {"id": "opendata/t187ap46_L_20", "name": "ESG資訊揭露-反競爭行為法律訴訟", "desc": "反競爭行為相關法律訴訟金額"},
@@ -26,12 +26,12 @@ TWSE_ENDPOINTS = {
     ],
     "證券交易": [
         {"id": "exchangeReport/STOCK_DAY_ALL", "name": "上市個股日成交資訊（全市場）", "desc": "全部上市股票當日開高低收、成交量、成交金額、成交筆數"},
-        {"id": "exchangeReport/BWIBBU_ALL", "name": "上市個股日本比殖利率", "desc": "本益比、殖利率、股價淨值比（全市場）"},
+        {"id": "exchangeReport/BWIBBU_ALL", "name": "上市個股日本益比殖利率", "desc": "本益比、利率、股價淨值比（全市場）"},
         {"id": "exchangeReport/MI_INDEX", "name": "大盤統計資訊", "desc": "每日大盤成交統計、漲跌家數"},
     ],
     "權證": [
         {"id": "opendata/t187ap11_L", "name": "上市權證基本資料", "desc": "權證標的、履約價、到期日、發行人"},
-        {"id": "opendata/t187ap12_L", "name": "上市權證交易資料", "desc": "權證每日交易行情、成交量、收盤價"},
+        {"id": "opendata/t187ap12_L", "name": "上市權證交易資料", "desc": "權證每日交易行情成交量、收盤價"},
     ],
     "券商資料": [
         {"id": "opendata/t187ap30_L", "name": "上市券商分公司成交資訊", "desc": "各券商分公司每日成交金額與成交量"},
@@ -645,9 +645,34 @@ function render() {
   }
 }
 
+// ===== 高亮文字（不用 regex $1，改用 split/join） =====
+function highlightText(text, query) {
+  if (!query) return escapeHtml(text);
+  const str = String(text);
+  const lowerStr = str.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let result = '';
+  let lastIndex = 0;
+  let idx = lowerStr.indexOf(lowerQuery);
+  while (idx !== -1) {
+    result += escapeHtml(str.slice(lastIndex, idx));
+    result += '<mark style="background:rgba(56,189,248,0.3);color:var(--accent);border-radius:3px;padding:1px 3px;">';
+    result += escapeHtml(str.slice(idx, idx + query.length));
+    result += '</mark>';
+    lastIndex = idx + query.length;
+    idx = lowerStr.indexOf(lowerQuery, lastIndex);
+  }
+  result += escapeHtml(str.slice(lastIndex));
+  return result;
+}
+
 // ===== 資料表格搜尋 =====
 function filterDataTable(searchText) {
-  if (!currentEndpointData || !Array.isArray(currentEndpointData)) return;
+  console.log('[搜尋] 輸入:', searchText);
+  if (!currentEndpointData || !Array.isArray(currentEndpointData)) {
+    console.log('[搜尋] 無資料可搜尋');
+    return;
+  }
   const q = searchText.toLowerCase().trim();
   if (!q) {
     currentFilteredRows = currentEndpointData;
@@ -659,6 +684,7 @@ function filterDataTable(searchText) {
       });
     });
   }
+  console.log('[搜尋] 結果筆數:', currentFilteredRows.length);
   renderDataTable(currentFilteredRows, q);
   if (resultCount) {
     resultCount.textContent = q
@@ -668,27 +694,26 @@ function filterDataTable(searchText) {
 }
 
 // ===== 渲染資料表格 =====
-function renderDataTable(rows, highlightText) {
-  if (!tableContainer) return;
+function renderDataTable(rows, highlightQuery) {
+  console.log('[渲染] 行數:', rows ? rows.length : 0);
+  if (!tableContainer) {
+    console.error('[渲染] tableContainer 不存在');
+    return;
+  }
   if (!rows || rows.length === 0) {
-    tableContainer.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>沒有符合搜尋條件的資料</p></div>';
+    tableContainer.innerHTML = '<div class="no-data"><div class="no-data-icon">🔍</div><p>有符合搜尋條件的資料</p></div>';
     return;
   }
   const columns = Object.keys(rows[0]);
   let html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>';
   columns.forEach(col => { html += '<th>' + escapeHtml(col) + '</th>'; });
   html += '</tr></thead><tbody>';
-  rows.slice(0, 200).forEach(row => {
+  rows.slice(0, 200).forEach((row, idx) => {
     html += '<tr>';
     columns.forEach(col => {
       const val = row[col];
       const display = val == null ? '' : String(val);
-      let cell = escapeHtml(display);
-      if (highlightText && highlightText.trim()) {
-        const pattern = escapeRegExp(highlightText);
-        const regex = new RegExp('(' + pattern + ')', 'gi');
-        cell = cell.replace(regex, '<mark style="background:rgba(56,189,248,0.3);color:var(--accent);border-radius:3px;padding:1px 3px;">$1</mark>');
-      }
+      const cell = highlightText(display, highlightQuery);
       html += '<td title="' + escapeHtml(display) + '">' + cell + '</td>';
     });
     html += '</tr>';
@@ -700,12 +725,9 @@ function renderDataTable(rows, highlightText) {
   tableContainer.innerHTML = html;
 }
 
-function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, function(m) { return '\\\\' + m; });
-}
-
 // ===== 開啟 Modal =====
 function openModal(ep, category) {
+  console.log('[Modal] 開啟:', ep.name, ep.id);
   modalTitle.textContent = ep.name + ' (' + ep.id + ')';
   tabJson.innerHTML = '<pre class="json-preview">' + escapeHtml(JSON.stringify(ep.data, null, 2)) + '</pre>';
 
@@ -759,7 +781,13 @@ modalClose.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-dataSearchBox.addEventListener('input', (e) => {
+// 資料表格搜尋事件：同時綁定 input 和 keyup 確保相容性
+dataSearchBox.addEventListener('input', function(e) {
+  console.log('[事件] input 觸發, 值:', e.target.value);
+  filterDataTable(e.target.value);
+});
+dataSearchBox.addEventListener('keyup', function(e) {
+  console.log('[事件] keyup 觸發, 值:', e.target.value);
   filterDataTable(e.target.value);
 });
 
@@ -776,6 +804,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // ===== 啟動 =====
 initFilters();
 render();
+console.log('[系統] 儀表板已載入, 端點數:', Object.values(API_DATA).reduce((a,b)=>a+b.length,0));
 </script>
 </body>
 </html>"""
