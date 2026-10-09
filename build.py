@@ -881,18 +881,29 @@ function escapeHtml(value) {
 
 function parseNumeric(value) {
   if (value == null) return null;
+  let s = String(value).trim();
+  if (!s || ["—", "－", "-", "--", "N/A", "X", "除權息", "除息", "除權"].includes(s)) return null;
+  // TWSE 部分欄位使用逗號、百分比符號或括號表示負數。
+  const negative = /^\(.*\)$/.test(s);
+  s = s.replace(/[，,\s]/g, "").replace(/%$/, "").replace(/^\(|\)$/g, "");
+  if (!s || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(s)) return null;
+  const number = Number(s);
+  return Number.isFinite(number) ? (negative ? -Math.abs(number) : number) : null;
+}
 
-  const s = String(value).replace(/,/g, "").trim();
-
-  if (!s) return null;
-
-  const normalized = s.endsWith("%")
-    ? s.slice(0, -1)
-    : s;
-
-  const number = Number(normalized);
-
-  return Number.isFinite(number) ? number : null;
+function signedChange(row) {
+  // 「漲跌價差」常只有差額，方向須搭配「漲跌(+/-)」；優先處理已帶正負號的欄位。
+  const signed = row && (row["漲跌(+/-)"] ?? row["漲跌"]);
+  const delta = parseNumeric(row && row["漲跌價差"]);
+  if (signed != null && String(signed).trim()) {
+    const sign = String(signed).trim();
+    if (sign.includes("+") || sign === "紅") return delta == null ? 1 : Math.abs(delta);
+    if (sign.includes("-") || sign === "綠") return delta == null ? -1 : -Math.abs(delta);
+    const n = parseNumeric(sign);
+    if (n !== null && n !== 0) return n;
+  }
+  if (delta !== null && /-/.test(String(row["漲跌價差"]))) return delta;
+  return delta;
 }
 
 
@@ -1385,6 +1396,14 @@ function refreshTrendCharts() {
   renderTrendChart('turnoverTrendChart',turnoverSeries,period,'%');
 }
 
+function industryDisplayLabel(name, indexMap) {
+  const raw = String(name || "未分類").trim() || "未分類";
+  // 若來源已帶分類編號，直接保留；否則依中文產業名稱建立穩定的兩位數序號。
+  if (/^\d{1,2}\s+/.test(raw)) return raw.replace(/^(\d{1,2})\s+/, (_, n) => n.padStart(2, "0") + " ");
+  const n = indexMap && indexMap.get(raw);
+  return (n ? String(n).padStart(2, "0") + " " : "") + raw;
+}
+
 function renderOverview() {
   const fmt = v => Number.isFinite(v) ? v.toLocaleString("zh-TW", {maximumFractionDigits:2}) : "—";
   const rows = id => API_DATA[id] && Array.isArray(API_DATA[id].data) ? API_DATA[id].data : [];
@@ -1394,31 +1413,39 @@ function renderOverview() {
   const sum = (arr, keys) => arr.reduce((n,r)=>n+(numeric(r,keys)||0),0);
   const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
   const codeOf = r => getStockCode(r);
-  const industryOf = r => getIndustryForRow(r, "company") || (r["產業別"] && !/^\d+$/.test(String(r["產業別"])) ? String(r["產業別"]) : "未分類");
+  const industryOf = r => {
+    const mapped = getIndustryForRow(r, "company");
+    if (mapped) return mapped;
+    const raw = r && r["產業別"] != null ? String(r["產業別"]).trim() : "";
+    return raw && !/^\d+$/.test(raw) ? raw : "未分類";
+  };
   const industryMap = new Map();
   companies.forEach(r => { const i=industryOf(r); if(!industryMap.has(i)) industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0}); industryMap.get(i).companies++; });
-  valuation.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);const pe=numeric(r,["本益比"]), y=numeric(r,["殖利率(%)","殖利率"]);if(pe!==null&&pe>0)x.pe.push(pe);if(y!==null&&y>=0)x.yield.push(y);});
+  valuation.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);const pe=numeric(r,["本益比"]), y=numeric(r,["殖利率(%)","殖利率"]);if(pe!==null&&pe>0)x.pe.push(pe);if(y!==null&&y>=0&&y<=100)x.yield.push(y);});
   revenue.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);const rev=numeric(r,["當月營收","營業收入-當月營收","當月營業收入"]);if(rev!==null)x.revenue+=rev;const yoy=numeric(r,["去年同月增減(%)","營業收入-去年同月增減(%)","去年同月增減百分比","年增率"]);if(yoy!==null)x.revenueYoY.push(yoy);});
-  stocks.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);x.stocks++;x.amount+=numeric(r,["成交金額"])||0;const ch=numeric(r,["漲跌價差","漲跌"]);if(ch!==null){if(ch>0)x.up++;else if(ch<0)x.down++;}});
+  stocks.forEach(r=>{const i=industryOf(r);if(!industryMap.has(i))industryMap.set(i,{name:i,companies:0,pe:[],yield:[],revenue:0,revenueYoY:[],stocks:0,amount:0,up:0,down:0});const x=industryMap.get(i);x.stocks++;x.amount+=numeric(r,["成交金額"])||0;const ch=signedChange(r);if(ch!==null){if(ch>0)x.up++;else if(ch<0)x.down++;}});
   const industryStats=[...industryMap.values()].sort((a,b)=>b.companies-a.companies);
+  const industryNameOrder=[...new Set(industryStats.map(x=>x.name))].sort((a,b)=>a.localeCompare(b,"zh-TW"));
+  const industryIndexMap=new Map(industryNameOrder.map((name,i)=>[name,i+1]));
+  const industryLabel=name=>industryDisplayLabel(name,industryIndexMap);
   const topIndustries=industryStats.slice(0,10);
-  const up = stocks.filter(r => (numeric(r,["漲跌價差","漲跌"])||0)>0).length;
-  const down = stocks.filter(r => (numeric(r,["漲跌價差","漲跌"])||0)<0).length;
-  const flat = Math.max(0, stocks.length-up-down);
+  const up = stocks.filter(r => { const v=signedChange(r); return v!==null && v>0; }).length;
+  const down = stocks.filter(r => { const v=signedChange(r); return v!==null && v<0; }).length;
+  const flat = stocks.filter(r => { const v=signedChange(r); return v===null || v===0; }).length;
   const volume=sum(stocks,["成交股數","成交量"]), amount=sum(stocks,["成交金額"]);
-  const peValues=valuation.map(r=>numeric(r,["本益比"])).filter(v=>v!==null&&v>0);
-  const yieldValues=valuation.map(r=>numeric(r,["殖利率(%)","殖利率"])).filter(v=>v!==null&&v>=0);
+  const peValues=valuation.map(r=>numeric(r,["本益比"])).filter(v=>v!==null&&v>0&&v<1000);
+  const yieldValues=valuation.map(r=>numeric(r,["殖利率(%)","殖利率"])).filter(v=>v!==null&&v>=0&&v<=100);
   const revenueTotal=sum(revenue,["當月營收","營業收入-當月營收","當月營業收入"]);
   const errorCount=Object.values(API_DATA).filter(x=>x.has_error).length;
-  const highYield=valuation.filter(r=>(numeric(r,["殖利率(%)","殖利率"])||0)>=5).length;
+  const highYield=valuation.filter(r=>{const v=numeric(r,["殖利率(%)","殖利率"]);return v!==null&&v>=5&&v<=100;}).length;
   const lowPE=valuation.filter(r=>{const v=numeric(r,["本益比"]);return v!==null&&v>0&&v<=15;}).length;
-  const industryRows=topIndustries.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td>${fmt(x.companies)}</td><td>${fmt(x.stocks)}</td><td>${fmt(x.amount)}</td><td>${fmt(avg(x.pe))}</td><td>${avg(x.yield)===null?"—":fmt(avg(x.yield))+"%"}</td><td>${fmt(x.revenue)}</td><td>${avg(x.revenueYoY)===null?"—":fmt(avg(x.revenueYoY))+"%"}</td><td><span class="trend-up">${fmt(x.up)}</span> / <span class="trend-down">${fmt(x.down)}</span></td></tr>`).join("");
+  const industryRows=topIndustries.map(x=>`<tr><td>${escapeHtml(industryLabel(x.name))}</td><td>${fmt(x.companies)}</td><td>${fmt(x.stocks)}</td><td>${fmt(x.amount)}</td><td>${fmt(avg(x.pe))}</td><td>${avg(x.yield)===null?"—":fmt(avg(x.yield))+"%"}</td><td>${fmt(x.revenue)}</td><td>${avg(x.revenueYoY)===null?"—":fmt(avg(x.revenueYoY))+"%"}</td><td><span class="trend-up">${fmt(x.up)}</span> / <span class="trend-down">${fmt(x.down)}</span></td></tr>`).join("");
   mainContent.innerHTML = `<section class="content-panel active">
     <div class="panel-header"><div class="panel-icon">🧭</div><div><div class="panel-title">整體統計分析看板</div><div class="panel-subtitle">市場交易、估值、股利收益與產業財務概況；指標僅以本次取得的 API 資料計算。</div></div></div>
     <div class="overview-grid">
       <article class="overview-card"><div class="overview-label">上市公司家數</div><div class="overview-value">${fmt(companies.length)}</div><div class="overview-note">基本資料回傳筆數</div></article>
-      <article class="overview-card"><div class="overview-label">成交金額合計</div><div class="overview-value">${fmt(amount)}</div><div class="overview-note">單位依原始 API 欄位</div></article>
-      <article class="overview-card"><div class="overview-label">成交股數合計</div><div class="overview-value">${fmt(volume)}</div><div class="overview-note">依日成交資料加總</div></article>
+      <article class="overview-card"><div class="overview-label">成交金額合計</div><div class="overview-value">${fmt(amount)}</div><div class="overview-note">只加總可解析的成交金額欄位</div></article>
+      <article class="overview-card"><div class="overview-label">成交股數合計</div><div class="overview-value">${fmt(volume)}</div><div class="overview-note">只加總可解析的成交股數欄位</div></article>
       <article class="overview-card"><div class="overview-label">平均本益比</div><div class="overview-value">${fmt(avg(peValues))}</div><div class="overview-note">有效正值樣本 ${fmt(peValues.length)} 檔</div></article>
       <article class="overview-card"><div class="overview-label">平均殖利率</div><div class="overview-value">${avg(yieldValues)===null?"—":fmt(avg(yieldValues))+"%"}</div><div class="overview-note">有效樣本 ${fmt(yieldValues.length)} 檔</div></article>
       <article class="overview-card"><div class="overview-label">高殖利率個股</div><div class="overview-value">${fmt(highYield)}</div><div class="overview-note">殖利率 ≥ 5%（依當前資料）</div></article>
@@ -1427,10 +1454,10 @@ function renderOverview() {
       <article class="overview-card"><div class="overview-label">資料異常端點</div><div class="overview-value">${fmt(errorCount)}</div><div class="overview-note">共 ${fmt(Object.keys(API_DATA).length)} 個資料端點</div></article>
     </div>
     <div class="overview-columns"><article class="overview-card"><h3>市場漲跌廣度</h3><div class="breadth-row"><span class="trend-up">上漲 ${fmt(up)}</span><span class="trend-down">下跌 ${fmt(down)}</span><span>其他 ${fmt(flat)}</span></div><div class="breadth-bar"><span style="width:${stocks.length?up/stocks.length*100:0}%;background:#16a34a"></span><span style="width:${stocks.length?down/stocks.length*100:0}%;background:#dc2626"></span><span style="flex:1;background:#cbd5e1"></span></div><p class="overview-note">漲跌以 API 可辨識的「漲跌價差／漲跌」欄位計算；若欄位缺失，請以大盤統計資料核對。</p></article>
-    <article class="overview-card"><h3>上市公司家數最多的產業</h3>${topIndustries.length?topIndustries.slice(0,8).map(x=>`<div class="industry-bar-row"><span>${escapeHtml(x.name)}</span><div class="industry-bar"><i style="width:${x.companies/Math.max(...topIndustries.map(z=>z.companies),1)*100}%"></i></div><b>${fmt(x.companies)}</b></div>`).join(""):'<p>尚無產業資料</p>'}</article></div>
+    <article class="overview-card"><h3>上市公司家數最多的產業</h3>${topIndustries.length?topIndustries.slice(0,8).map(x=>`<div class="industry-bar-row"><span>${escapeHtml(industryLabel(x.name))}</span><div class="industry-bar"><i style="width:${x.companies/Math.max(...topIndustries.map(z=>z.companies),1)*100}%"></i></div><b>${fmt(x.companies)}</b></div>`).join(""):'<p>尚無產業資料</p>'}</article></div>
     <article class="overview-card"><h3>主要產業比較（按上市公司家數排序）</h3><p class="overview-note">成交金額、營收合計沿用 API 原始單位；平均本益比與殖利率只使用有效數值。營收年增率為可辨識年增欄位的簡單平均，若來源欄位不同會顯示 —。</p><div class="industry-table-wrap"><table class="industry-table"><thead><tr><th>產業別</th><th>公司家數</th><th>成交資料檔數</th><th>成交金額合計</th><th>平均本益比</th><th>平均殖利率</th><th>營收合計</th><th>平均營收年增率</th><th>上漲 / 下跌</th></tr></thead><tbody>${industryRows||'<tr><td colspan="9">目前沒有可用產業資料</td></tr>'}</tbody></table></div></article>
     <section class="trend-grid-wrap"><div class="panel-header" style="margin-top:1.25rem"><div><div class="panel-title">產業趨勢分析</div><div class="panel-subtitle">可切換觀察期間與產業；僅繪製來源確實提供的歷史資料，不以單月快照推估過去月份。</div></div></div>
-    <div class="trend-controls"><label for="trendPeriod">觀察期間</label><select id="trendPeriod" onchange="refreshTrendCharts()"><option value="3">近 3 個月</option><option value="6">近 6 個月</option><option value="12" selected>近 12 個月</option></select><label for="trendIndustry">產業</label><select id="trendIndustry" onchange="refreshTrendCharts()"><option value="all">整體市場</option>${industryStats.map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}</option>`).join('')}</select></div>
+    <div class="trend-controls"><label for="trendPeriod">觀察期間</label><select id="trendPeriod" onchange="refreshTrendCharts()"><option value="3">近 3 個月</option><option value="6">近 6 個月</option><option value="12" selected>近 12 個月</option></select><label for="trendIndustry">產業</label><select id="trendIndustry" onchange="refreshTrendCharts()"><option value="all">整體市場</option>${industryStats.map(x=>`<option value="${escapeHtml(x.name)}">${escapeHtml(industryLabel(x.name))}</option>`).join('')}</select></div>
     <div class="trend-grid"><article class="trend-card"><h3>近 12 個月各產業營收年增率趨勢</h3><p class="trend-desc">月營收年增率；切換產業可查看單一產業的月度變化。</p><div id="revenueTrendChart" class="trend-chart"></div></article><article class="trend-card"><h3>產業成交金額占比變化</h3><p class="trend-desc">各月產業成交金額占上市股票成交金額總和的比例。</p><div id="turnoverTrendChart" class="trend-chart"></div></article></div></section>
     <div class="overview-foot"><span>日成交資料：${fmt(stocks.length)} 筆</span><span>估值資料：${fmt(valuation.length)} 筆</span><span>股利資料：${fmt(rows("dividend").length)} 筆</span><span>資料端點異常：${fmt(errorCount)}</span></div>
     <p class="overview-disclaimer">本看板為描述性統計，不構成投資建議。這些數值是本次擷取資料的橫斷面概況，不代表歷史趨勢或即時行情；產業間比較可能受缺漏欄位、資料更新時間及公司家數差異影響。</p>
